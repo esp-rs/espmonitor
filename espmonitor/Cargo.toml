@@ -1,0 +1,35 @@
+[package]
+name = "espmonitor"
+version = "0.1.0"
+description = "Monitors ESP8266 and ESP32 execution over serial"
+license = "GPL-3.0"
+authors = [
+    "Brian J. Tarricone <brian@tarricone.org>",
+]
+homepage = "https://github.com/kelnos/espmonitor"
+repository = "https://github.com/kelnos/espmonitor"
+edition = "2018"
+readme = "../README.md"
+categories = [
+    "command-line-utilities",
+    "development-tools",
+    "development-tools::debugging",
+    "embedded",
+]
+keywords = [
+    "esp32",
+    "esp8266",
+]
+
+[[bin]]
+name = "espmonitor"
+path = "src/main.rs"
+
+[lib]
+
+[dependencies]
+lazy_static = "1"
+pico-args = "0.4"
+regex = "1"
+serial-core = "0.4"
+serial = "0.4"

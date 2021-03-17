@@ -1,0 +1,28 @@
+[package]
+name = "cargo-espmonitor"
+version = "0.1.0"
+description = "Cargo subcommand for monitoring ESP8266 and ESP32 execution over serial"
+license = "GPL-3.0"
+authors = [
+    "Brian J. Tarricone <brian@tarricone.org>",
+]
+homepage = "https://github.com/kelnos/espmonitor"
+repository = "https://github.com/kelnos/espmonitor"
+edition = "2018"
+readme = "../README.md"
+categories = [
+    "command-line-utilities",
+    "development-tools",
+    "development-tools::cargo-plugins",
+    "development-tools::debugging",
+    "embedded",
+]
+keywords = [
+    "esp32",
+    "esp8266",
+]
+
+[dependencies]
+cargo-project = "0.2"
+espmonitor = { version = "0.1.0", path = "../espmonitor" }
+pico-args = "0.4"
