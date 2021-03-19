@@ -1,0 +1,22 @@
+on:
+  release:
+    types:
+      - published
+name: release
+jobs:
+  release:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Publish espmonitor
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+        working-directory: espmonitor
+      - name: Publish cargo-espmonitor
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+        working-directory: cargo-espmonitor
