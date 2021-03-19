@@ -14,9 +14,5 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
-      - name: Publish espmonitor
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
-        working-directory: espmonitor
-      - name: Publish cargo-espmonitor
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
-        working-directory: cargo-espmonitor
+      - name: Publish release
+        run: ./release.sh ${{ secrets.CRATES_IO_TOKEN }}
