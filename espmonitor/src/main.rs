@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPFlash.  If not, see <https://www.gnu.org/licenses/>.
 
-use espmonitor::{AppArgs, Chip, run};
+use espmonitor::{AppArgs, Chip, Framework, run};
 use pico_args::Arguments;
 use std::convert::TryFrom;
 
@@ -41,6 +41,7 @@ fn parse_args() -> Result<Option<AppArgs>, pico_args::Error> {
         let chip = args.opt_value_from_fn("--chip", |s| Chip::try_from(s))?.unwrap_or_default();
         Ok(Some(AppArgs {
             chip,
+            framework: Framework::default(),
             speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
             reset: args.contains("--reset") || !args.contains("--no-reset"),
             bin: args.opt_value_from_str("--bin")?,

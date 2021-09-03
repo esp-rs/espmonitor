@@ -16,14 +16,16 @@
 // along with ESPFlash.  If not, see <https://www.gnu.org/licenses/>.
 
 use cargo_project::{Artifact, Profile, Project};
-use espmonitor::{AppArgs, Chip, run};
+use espmonitor::{AppArgs, Chip, Framework, run};
 use pico_args::Arguments;
 use std::convert::TryFrom;
 use std::env;
 use std::ffi::OsString;
 
 fn main() {
-    match parse_args().map(|args| args.map(run)) {
+    // Skip 'cargo espmonitor'
+    let args = env::args().skip(2).map(OsString::from).collect();
+    match parse_args(args).map(|args| args.map(run)) {
         Ok(_) => (),
         Err(err) => {
             println!("Error: {}", err);
@@ -34,17 +36,26 @@ fn main() {
     }
 }
 
-fn parse_args() -> Result<Option<AppArgs>, Box<dyn std::error::Error>> {
-    // Skip 'cargo espmonitor'
-    let args = env::args().skip(2).map(OsString::from).collect();
+fn parse_args(args: Vec<OsString>) -> Result<Option<AppArgs>, Box<dyn std::error::Error>> {
     let mut args = Arguments::from_vec(args);
 
     if args.contains("-h") || args.contains("--help") {
         print_usage();
         Ok(None)
     } else {
-        #[allow(clippy::redundant_closure)]
-        let chip = args.opt_value_from_fn("--chip", |s| Chip::try_from(s))?.unwrap_or_default();
+        let (chip, framework) = match args.opt_value_from_str::<&str, String>("--target")? {
+            Some(ref target) => (
+                Chip::from_target(target)?,
+                Framework::from_target(target)?,
+            ),
+            None => (
+                #[allow(clippy::redundant_closure)]
+                args.opt_value_from_fn("--chip", |s| Chip::try_from(s))?.unwrap_or_default(),
+                #[allow(clippy::redundant_closure)]
+                args.opt_value_from_fn("--framework", |s| Framework::try_from(s))?.unwrap_or_default(),
+            )
+        };
+
         let release = args.contains("--release");
         let example: Option<String> = args.opt_value_from_str("--example")?;
 
@@ -56,10 +67,11 @@ fn parse_args() -> Result<Option<AppArgs>, Box<dyn std::error::Error>> {
         let profile = if release { Profile::Release } else { Profile::Dev };
 
         let host = "x86_64-unknown-linux-gnu";  // FIXME: does this even matter?
-        let bin = project.path(artifact, profile, Some(chip.target()), host)?;
+        let bin = project.path(artifact, profile, Some(chip.target(framework)), host)?;
 
         Ok(Some(AppArgs {
             chip,
+            framework,
             reset: args.contains("--reset") || !args.contains("--no-reset"),
             speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
             bin: Some(bin.as_os_str().to_os_string()),
@@ -71,13 +83,15 @@ fn parse_args() -> Result<Option<AppArgs>, Box<dyn std::error::Error>> {
 fn print_usage() {
     let usage = "Usage: cargo espmonitor [OPTIONS] SERIAL_DEVICE\n\
         \n\
-        \x20   --chip {esp32|esp8266}   Which ESP chip to target\n\
-        \x20   --release                Use the release build\n\
-        \x20   --example EXAMPLE        Use the named example app binary\n\
-        \x20   --reset                  Reset the chip on start (default)\n\
-        \x20   --no-reset               Do not reset thechip on start\n\
-        \x20   --speed BAUD             Baud rate of serial device (default: 115200)\n\
-        \x20   SERIAL_DEVICE            Path to the serial device";
+        \x20   --target TARGET                 Infer chip and framework from target triple\n\
+        \x20   --chip {esp32|esp8266}          Which ESP chip to target\n\
+        \x20   --framework {baremetal,esp-idf} Which framework to target\n\
+        \x20   --release                       Use the release build\n\
+        \x20   --example EXAMPLE               Use the named example app binary\n\
+        \x20   --reset                         Reset the chip on start (default)\n\
+        \x20   --no-reset                      Do not reset thechip on start\n\
+        \x20   --speed BAUD                    Baud rate of serial device (default: 115200)\n\
+        \x20   SERIAL_DEVICE                   Path to the serial device";
 
     println!("{}", usage);
 }

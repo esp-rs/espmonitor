@@ -18,8 +18,8 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 use serial_core::{BaudRate, SerialDevice, SerialPortSettings};
-use std::{ffi::OsString, ffi::OsStr, io::ErrorKind, path::Path, process::Stdio, time::Instant};
-use std::io::{Read, Write};
+use std::{ffi::OsString, ffi::OsStr, path::Path, process::Stdio, time::Instant};
+use std::io::{Error as IoError, ErrorKind, Read, Write};
 use std::process::Command;
 use std::time::Duration;
 
@@ -33,17 +33,69 @@ lazy_static! {
         .expect("Failed to parse addr2line output regex");
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Framework {
+    Baremetal,
+    EspIdf,
+}
+
+impl Framework {
+    pub fn from_target<S: AsRef<str>>(target: S) -> Result<Self, IoError> {
+        let target = target.as_ref();
+        if target.ends_with("-espidf") {
+            Ok(Framework::EspIdf)
+        } else if target.ends_with("-none-elf") {
+            Ok(Framework::Baremetal)
+        } else {
+            Err(IoError::new(ErrorKind::InvalidInput, format!("Can't figure out framework from target '{}'", target)))
+        }
+    }
+}
+
+impl std::convert::TryFrom<&str> for Framework {
+    type Error = IoError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "baremetal" => Ok(Framework::Baremetal),
+            "esp-idf" | "espidf" => Ok(Framework::EspIdf),
+            _ => Err(IoError::new(ErrorKind::InvalidInput, format!("'{}' is not a valid framework", value))),
+        }
+    }
+}
+
+impl Default for Framework {
+    fn default() -> Self {
+        Framework::Baremetal
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Chip {
     ESP32,
     ESP8266,
 }
 
 impl Chip {
-    pub fn target(&self) -> &str {
-        match self {
-            Chip::ESP32 => "xtensa-esp32-none-elf",
-            Chip::ESP8266 => "xtensa-esp8266-none-elf",
+    pub fn from_target<S: AsRef<str>>(target: S) -> Result<Chip, IoError> {
+        let target = target.as_ref();
+        if target.contains("-esp32-") {
+            Ok(Chip::ESP32)
+        } else if target.contains("-esp8266-") {
+            Ok(Chip::ESP8266)
+        } else {
+            Err(IoError::new(ErrorKind::InvalidInput, format!("Can't figure out chip from target '{}'", target)))
+        }
+    }
+}
+
+impl Chip {
+    pub fn target(&self, framework: Framework) -> &str {
+        match (self, framework) {
+            (Chip::ESP32, Framework::Baremetal) => "xtensa-esp32-none-elf",
+            (Chip::ESP8266, Framework::Baremetal) => "xtensa-esp8266-none-elf",
+            (Chip::ESP32, Framework::EspIdf) => "xtensa-esp32-espidf",
+            // This last one isn't actually valid, but that's ok, it'll fail properly later
+            (Chip::ESP8266, Framework::EspIdf) => "xtensa-esp8266-espidf",
         }
     }
 
@@ -55,22 +107,13 @@ impl Chip {
     }
 }
 
-#[derive(Debug)]
-pub struct AppArgs {
-    pub serial: OsString,
-    pub chip: Chip,
-    pub speed: Option<usize>,
-    pub reset: bool,
-    pub bin: Option<OsString>,
-}
-
 impl std::convert::TryFrom<&str> for Chip {
-    type Error = std::io::Error;
+    type Error = IoError;
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "esp32" => Ok(Chip::ESP32),
             "esp8266" => Ok(Chip::ESP8266),
-            _ => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("'{}' is not a valid chip", value))),
+            _ => Err(IoError::new(ErrorKind::InvalidInput, format!("'{}' is not a valid chip", value))),
         }
     }
 }
@@ -79,6 +122,16 @@ impl Default for Chip {
     fn default() -> Self {
         Chip::ESP32
     }
+}
+
+#[derive(Debug)]
+pub struct AppArgs {
+    pub serial: OsString,
+    pub chip: Chip,
+    pub framework: Framework,
+    pub speed: Option<usize>,
+    pub reset: bool,
+    pub bin: Option<OsString>,
 }
 
 pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
