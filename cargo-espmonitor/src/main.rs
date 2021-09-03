@@ -69,7 +69,7 @@ fn parse_args() -> Result<Option<AppArgs>, Box<dyn std::error::Error>> {
 }
 
 fn print_usage() {
-    let usage = "Usage: cargo espflash [OPTIONS] SERIAL_DEVICE\n\
+    let usage = "Usage: cargo espmonitor [OPTIONS] SERIAL_DEVICE\n\
         \n\
         \x20   --chip {esp32|esp8266}   Which ESP chip to target\n\
         \x20   --release                Use the release build\n\

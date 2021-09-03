@@ -50,7 +50,7 @@ fn parse_args() -> Result<Option<AppArgs>, pico_args::Error> {
 }
 
 fn print_usage() {
-    let usage = "Usage: espflash [OPTIONS] SERIAL_DEVICE\n\
+    let usage = "Usage: espmonitor [OPTIONS] SERIAL_DEVICE\n\
         \n\
         \x20   --chip {esp32|esp8266}   Which ESP chip to target\n\
         \x20   --reset                  Reset the chip on start (default)\n\
