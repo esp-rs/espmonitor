@@ -72,6 +72,7 @@ impl Default for Framework {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Chip {
     ESP32,
+    ESP32S2,
     ESP8266,
 }
 
@@ -80,6 +81,8 @@ impl Chip {
         let target = target.as_ref();
         if target.contains("-esp32-") {
             Ok(Chip::ESP32)
+        } else if target.contains("-esp32s2-") {
+            Ok(Chip::ESP32S2)
         } else if target.contains("-esp8266-") {
             Ok(Chip::ESP8266)
         } else {
@@ -89,19 +92,24 @@ impl Chip {
 }
 
 impl Chip {
-    pub fn target(&self, framework: Framework) -> &str {
-        match (self, framework) {
-            (Chip::ESP32, Framework::Baremetal) => "xtensa-esp32-none-elf",
-            (Chip::ESP8266, Framework::Baremetal) => "xtensa-esp8266-none-elf",
-            (Chip::ESP32, Framework::EspIdf) => "xtensa-esp32-espidf",
-            // This last one isn't actually valid, but that's ok, it'll fail properly later
-            (Chip::ESP8266, Framework::EspIdf) => "xtensa-esp8266-espidf",
-        }
+    pub fn target(&self, framework: Framework) -> String {
+        let mut target = String::from("xtensa-");
+        target.push_str(match self {
+            Chip::ESP32 => "esp32-",
+            Chip::ESP32S2 => "esp32s2-",
+            Chip::ESP8266 => "esp82660",
+        });
+        target.push_str(match framework {
+            Framework::Baremetal => "none-elf",
+            Framework::EspIdf=> "espidf",
+        });
+        target
     }
 
     pub fn tool_prefix(&self) -> &str {
         match self {
             Chip::ESP32 => "xtensa-esp32-elf-",
+            Chip::ESP32S2 => "xtensa-esp32s2-elf-",
             Chip::ESP8266 => "xtensa-esp8266-elf-",
         }
     }

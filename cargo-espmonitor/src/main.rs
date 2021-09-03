@@ -67,7 +67,7 @@ fn parse_args(args: Vec<OsString>) -> Result<Option<AppArgs>, Box<dyn std::error
         let profile = if release { Profile::Release } else { Profile::Dev };
 
         let host = "x86_64-unknown-linux-gnu";  // FIXME: does this even matter?
-        let bin = project.path(artifact, profile, Some(chip.target(framework)), host)?;
+        let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
 
         Ok(Some(AppArgs {
             chip,
