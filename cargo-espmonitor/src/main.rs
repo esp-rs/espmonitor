@@ -18,25 +18,74 @@
 use cargo_project::{Artifact, Profile, Project};
 use espmonitor::{AppArgs, Chip, Framework, run};
 use pico_args::Arguments;
-use std::convert::TryFrom;
-use std::env;
-use std::ffi::OsString;
+use std::{
+    convert::TryFrom,
+    env,
+    error::Error,
+    ffi::OsString,
+    io,
+    process::Command,
+};
+
+struct CargoAppArgs {
+    flash: bool,
+    release: bool,
+    example: Option<String>,
+    features: Option<String>,
+    app_args: AppArgs,
+}
 
 fn main() {
-    // Skip 'cargo espmonitor'
+    // Skip first two args ('cargo', 'espmonitor')
     let args = env::args().skip(2).map(OsString::from).collect();
-    match parse_args(args).map(|args| args.map(run)) {
-        Ok(_) => (),
-        Err(err) => {
-            println!("Error: {}", err);
-            println!();
-            print_usage();
-            std::process::exit(1);
-        },
+
+    if let Err(err) = parse_args(args).and_then(|cargo_app_args|
+        cargo_app_args
+            .map(|mut cargo_app_args| {
+                if cargo_app_args.flash {
+                    run_flash(&mut cargo_app_args)?;
+                }
+                run(cargo_app_args.app_args)
+            })
+            .unwrap_or(Ok(()))
+    ) {
+        eprintln!("Error: {}", err);
+        eprintln!();
+        print_usage();
+        std::process::exit(1);
     }
 }
 
-fn parse_args(args: Vec<OsString>) -> Result<Option<AppArgs>, Box<dyn std::error::Error>> {
+fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
+    let mut args = vec!["espflash".to_string()];
+    if cargo_app_args.release {
+        args.push("--release".to_string());
+    }
+    if let Some(example) = cargo_app_args.example.take() {
+        args.push("--example".to_string());
+        args.push(example);
+    }
+    if let Some(features) = cargo_app_args.features.take() {
+        args.push("--features".to_string());
+        args.push(features);
+    }
+    args.push(
+        cargo_app_args.app_args.serial.clone().into_string()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Serial device is not a valid string".to_string()))?
+    );
+
+    let status = Command::new("cargo")
+        .args(&args[..])
+        .spawn()?
+        .wait()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::new(io::ErrorKind::Other, "Flash failed".to_string()).into())
+    }
+}
+
+fn parse_args(args: Vec<OsString>) -> Result<Option<CargoAppArgs>, Box<dyn Error>> {
     let mut args = Arguments::from_vec(args);
 
     if args.contains("-h") || args.contains("--help") {
@@ -69,20 +118,31 @@ fn parse_args(args: Vec<OsString>) -> Result<Option<AppArgs>, Box<dyn std::error
         let host = "x86_64-unknown-linux-gnu";  // FIXME: does this even matter?
         let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
 
-        Ok(Some(AppArgs {
-            chip,
-            framework,
-            reset: args.contains("--reset") || !args.contains("--no-reset"),
-            speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
-            bin: Some(bin.as_os_str().to_os_string()),
-            serial: args.free_from_str()?,
-        }))
+        Ok(Some(
+            CargoAppArgs {
+                flash: args.contains("--flash"),
+                release: args.contains("--release"),
+                example: args.opt_value_from_str("--example")?,
+                features: args.opt_value_from_str("--features")?,
+                app_args: AppArgs {
+                    chip,
+                    framework,
+                    reset: args.contains("--reset") || !args.contains("--no-reset"),
+                    speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
+                    bin: Some(bin.as_os_str().to_os_string()),
+                    serial: args.free_from_str()?,
+                }
+            }
+        ))
     }
 }
 
 fn print_usage() {
     let usage = "Usage: cargo espmonitor [OPTIONS] SERIAL_DEVICE\n\
         \n\
+        \x20   --flash                         Flashes image to device (building first if necessary; requires 'cargo-espflash')\n\
+        \x20   --example EXAMPLE               If flashing, flash this example app\n\
+        \x20   --features FEATURES             If flashing, build with these features first\n\
         \x20   --target TARGET                 Infer chip and framework from target triple\n\
         \x20   --chip {esp32|esp8266}          Which ESP chip to target\n\
         \x20   --framework {baremetal,esp-idf} Which framework to target\n\

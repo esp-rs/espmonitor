@@ -6,6 +6,7 @@ ESP32 and ESP8266 serial monitor.
 
 * Resets chip on startup.
 * Can match hex sequences in output to function names in a binary.
+* Optionally builds and flashes before starting the monitor.
 * `cargo` integration.
 
 ## Usage
