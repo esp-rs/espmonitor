@@ -28,6 +28,7 @@ while [ $wait -gt 0 -a "$max_version" != "$new_version" ]; do
     wait=$((wait-1))
 done
 if [ "$max_version" == "$new_version" ]; then
+    sleep 5
     echo "New version $max_version published"
 else
     echo "New version $new_version failed to show up; latest version is currently $max_version" >&2
