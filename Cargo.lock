@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-espmonitor"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cargo-project",
  "espmonitor",
@@ -85,7 +85,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "espmonitor"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "lazy_static",
  "pico-args",
