@@ -6,8 +6,8 @@ license = "GPL-3.0"
 authors = [
     "Brian J. Tarricone <brian@tarricone.org>",
 ]
-homepage = "https://github.com/kelnos/espmonitor"
-repository = "https://github.com/kelnos/espmonitor"
+homepage = "https://github.com/esp-rs/espmonitor"
+repository = "https://github.com/esp-rs/espmonitor"
 edition = "2018"
 readme = "../README.md"
 categories = [
