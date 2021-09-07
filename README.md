@@ -22,8 +22,6 @@ Run `cargo espmonitor --help` for details.
 If you prefer the standalone monitor app without `cargo` integration,
 you can instead install `espmonitor`.
 
-Note that this program will not build or flash your project for you.
-
 ## Releasing
 
 See [RELEASING](RELEASING.md) for instructions.
