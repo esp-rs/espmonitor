@@ -18,20 +18,23 @@
 use espmonitor::{AppArgs, Chip, Framework, run};
 use pico_args::Arguments;
 use std::convert::TryFrom;
+use std::error::Error;
 
 fn main() {
-    match parse_args().map(|args| args.map(run)) {
+    match parse_args().and_then(|args| args.map(run).unwrap_or(Ok(()))) {
         Ok(_) => (),
         Err(err) => {
             println!("Error: {}", err);
             println!();
-            print_usage();
+            if let Ok(_) = err.downcast::<pico_args::Error>() {
+                print_usage();
+            }
             std::process::exit(1);
         },
     }
 }
 
-fn parse_args() -> Result<Option<AppArgs>, pico_args::Error> {
+fn parse_args() -> Result<Option<AppArgs>, Box<dyn Error>> {
     let mut args = Arguments::from_env();
     if args.contains("-h") || args.contains("--help") {
         print_usage();

@@ -54,7 +54,9 @@ fn main() {
     ) {
         eprintln!("Error: {}", err);
         eprintln!();
-        print_usage();
+        if let Ok(_) = err.downcast::<pico_args::Error>() {
+            print_usage();
+        }
         std::process::exit(1);
     }
 }
