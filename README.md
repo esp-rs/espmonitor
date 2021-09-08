@@ -22,6 +22,13 @@ Run `cargo espmonitor --help` for details.
 If you prefer the standalone monitor app without `cargo` integration,
 you can instead install `espmonitor`.
 
+### Keyboard Commands
+
+While monitoring, ESPMonitor accepts the following keyboard commands:
+
+* CTRL+R: Reset chip
+* CTRL+C: Quit
+
 ## Releasing
 
 See [RELEASING](RELEASING.md) for instructions.

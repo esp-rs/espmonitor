@@ -29,7 +29,9 @@ path = "src/main.rs"
 
 [dependencies]
 lazy_static = "1"
+mio = "0.7"
+mio-serial = "5"
+nix = "0.22"
 pico-args = "0.4"
 regex = "1"
-serial-core = "0.4"
-serial = "0.4"
+termios = "0.3"

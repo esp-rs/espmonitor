@@ -42,7 +42,7 @@ fn parse_args() -> Result<Option<AppArgs>, pico_args::Error> {
         Ok(Some(AppArgs {
             chip,
             framework: Framework::default(),
-            speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
+            speed: args.opt_value_from_fn("--speed", |s| s.parse::<u32>())?,
             reset: args.contains("--reset") || !args.contains("--no-reset"),
             bin: args.opt_value_from_str("--bin")?,
             serial: args.free_from_str()?,
