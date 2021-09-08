@@ -27,8 +27,11 @@ use std::{
     process::Command,
 };
 
+const DEFAULT_FLASH_BAUD_RATE: u32 = 460_800;
+
 struct CargoAppArgs {
     flash: bool,
+    flash_speed: u32,
     release: bool,
     example: Option<String>,
     features: Option<String>,
@@ -69,6 +72,8 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
         args.push("--features".to_string());
         args.push(features);
     }
+    args.push("--speed".to_string());
+    args.push(cargo_app_args.flash_speed.to_string());
     args.push(cargo_app_args.app_args.serial.clone());
 
     let status = Command::new("cargo")
@@ -118,6 +123,7 @@ fn parse_args(args: Vec<OsString>) -> Result<Option<CargoAppArgs>, Box<dyn Error
         Ok(Some(
             CargoAppArgs {
                 flash: args.contains("--flash"),
+                flash_speed: args.opt_value_from_fn("--flash-speed", |s| s.parse::<u32>())?.unwrap_or(DEFAULT_FLASH_BAUD_RATE),
                 release: args.contains("--release"),
                 example: args.opt_value_from_str("--example")?,
                 features: args.opt_value_from_str("--features")?,
@@ -138,6 +144,7 @@ fn print_usage() {
     let usage = "Usage: cargo espmonitor [OPTIONS] SERIAL_DEVICE\n\
         \n\
         \x20   --flash                         Flashes image to device (building first if necessary; requires 'cargo-espflash')\n\
+        \x20   --flash-speed                   Baud rate when flashing (default 460800)\n\
         \x20   --example EXAMPLE               If flashing, flash this example app\n\
         \x20   --features FEATURES             If flashing, build with these features first\n\
         \x20   --target TARGET                 Infer chip and framework from target triple\n\
