@@ -97,7 +97,7 @@ impl Chip {
         target.push_str(match self {
             Chip::ESP32 => "esp32-",
             Chip::ESP32S2 => "esp32s2-",
-            Chip::ESP8266 => "esp82660",
+            Chip::ESP8266 => "esp8266-",
         });
         target.push_str(match framework {
             Framework::Baremetal => "none-elf",
