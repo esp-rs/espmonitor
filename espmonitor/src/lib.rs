@@ -16,14 +16,15 @@
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
 use lazy_static::lazy_static;
-use mio::{Interest, Poll, Token, event::Events, unix::SourceFd};
+use mio::{Interest, Poll, Token, event::Events};
 use mio_serial::{SerialPort, SerialPortBuilderExt, SerialStream};
-use nix::{sys::wait::{WaitStatus, waitpid}, unistd::{ForkResult, fork}};
 use regex::Regex;
 use std::{ffi::OsString, ffi::OsStr, path::Path, process::Stdio, time::Instant};
 use std::io::{self, Error as IoError, ErrorKind, Read, Write};
-use std::process::{Command, exit};
+use std::process::Command;
 use std::time::Duration;
+
+#[cfg(unix)]
 use termios::{ISIG, OPOST, TCSAFLUSH, Termios, cfmakeraw, tcsetattr};
 
 const DEFAULT_BAUD_RATE: u32 = 115_200;
@@ -158,7 +159,11 @@ struct SerialReader {
     tool_prefix: &'static str,
 }
 
-pub fn run(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(unix)]
+pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
+    use nix::{sys::wait::{WaitStatus, waitpid}, unistd::{ForkResult, fork}};
+    use std::process::exit;
+
     let orig_tty_settings = set_tty_raw()?;
 
     match unsafe { fork() } {
@@ -176,63 +181,70 @@ pub fn run(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
                 _ => (),
             }
         }
-        Ok(ForkResult::Child) => {
-            println!(concat!("ESPMonitor ", env!("CARGO_PKG_VERSION")));
-            println!("");
-            println!("Commands:");
-            println!("    CTRL+R    Reset chip");
-            println!("    CTRL+C    Exit");
-            println!("");
+        Ok(ForkResult::Child) => run_child(args),
+    }
+}
 
-            let speed = args.speed.unwrap_or(DEFAULT_BAUD_RATE);
-            println!("Opening {} with speed {}", args.serial, speed);
+#[cfg(windows)]
+pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
+    run_child(args)
+}
 
-            let mut dev = mio_serial::new(args.serial, speed)
-                .timeout(Duration::from_millis(200))
-                .open_native_async()?;
+fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
+    println!(concat!("ESPMonitor ", env!("CARGO_PKG_VERSION")));
+    println!("");
+    println!("Commands:");
+    println!("    CTRL+R    Reset chip");
+    println!("    CTRL+C    Exit");
+    println!("");
 
-            if let Some(bin) = args.bin.as_ref() {
-                if Path::new(bin).exists() {
-                    println!("Using {} as flash image", bin.to_string_lossy());
-                } else {
-                    eprintln!("WARNING: Flash image {} does not exist (you may need to build it)", bin.to_string_lossy());
-                }
-            }
+    let speed = args.speed.unwrap_or(DEFAULT_BAUD_RATE);
+    println!("Opening {} with speed {}", args.serial, speed);
 
-            if args.reset {
-                reset_chip(&mut dev)?;
-            }
+    let mut dev = mio_serial::new(args.serial, speed)
+        .timeout(Duration::from_millis(200))
+        .open_native_async()?;
 
-            set_tty_raw()?;
+    if let Some(bin) = args.bin.as_ref() {
+        if Path::new(bin).exists() {
+            println!("Using {} as flash image", bin.to_string_lossy());
+        } else {
+            eprintln!("WARNING: Flash image {} does not exist (you may need to build it)", bin.to_string_lossy());
+        }
+    }
 
-            let mut poll = Poll::new()?;
-            let mut events = Events::with_capacity(512);
+    if args.reset {
+        reset_chip(&mut dev)?;
+    }
 
-            poll.registry().register(&mut dev, SERIAL, Interest::READABLE)?;
-            poll.registry().register(&mut SourceFd(&0), STDIN, Interest::READABLE)?;
+    let mut poll = Poll::new()?;
+    let mut events = Events::with_capacity(512);
 
-            let mut serial_reader = SerialReader {
-                dev,
-                unfinished_line: String::new(),
-                last_unfinished_line_at: Instant::now(),
-                bin: args.bin.take(),
-                tool_prefix: args.chip.tool_prefix(),
-            };
+    poll.registry().register(&mut dev, SERIAL, Interest::READABLE)?;
+    #[cfg(unix)]
+    poll.registry().register(&mut mio::unix::SourceFd(&0), STDIN, Interest::READABLE)?;
 
-            loop {
-                poll.poll(&mut events, None)?;
-                for event in events.iter() {
-                    match event.token() {
-                        STDIN => handle_stdin(&mut serial_reader)?,
-                        SERIAL => handle_serial(&mut serial_reader)?,
-                        _ => (),
-                    }
-                }
+    let mut serial_reader = SerialReader {
+        dev,
+        unfinished_line: String::new(),
+        last_unfinished_line_at: Instant::now(),
+        bin: args.bin.take(),
+        tool_prefix: args.chip.tool_prefix(),
+    };
+
+    loop {
+        poll.poll(&mut events, None)?;
+        for event in events.iter() {
+            match event.token() {
+                STDIN => handle_stdin(&mut serial_reader)?,
+                SERIAL => handle_serial(&mut serial_reader)?,
+                _ => (),
             }
         }
     }
 }
 
+#[cfg(unix)]
 fn set_tty_raw() -> io::Result<Termios> {
     let orig_settings = Termios::from_fd(0)?;
     let mut raw_settings = orig_settings.clone();
@@ -243,6 +255,7 @@ fn set_tty_raw() -> io::Result<Termios> {
     Ok(orig_settings)
 }
 
+#[cfg(unix)]
 fn restore_tty(settings: &Termios) {
     if let Err(err) = tcsetattr(0, TCSAFLUSH, settings) {
         eprintln!("Failed to return terminal to cooked mode: {}", err);

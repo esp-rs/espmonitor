@@ -34,4 +34,6 @@ mio-serial = "5"
 nix = "0.22"
 pico-args = "0.4"
 regex = "1"
+
+[target.'cfg(unix)'.dependencies]
 termios = "0.3"

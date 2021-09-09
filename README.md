@@ -29,6 +29,8 @@ While monitoring, ESPMonitor accepts the following keyboard commands:
 * CTRL+R: Reset chip
 * CTRL+C: Quit
 
+(Note that this extra functionality does not currently work on Windows.)
+
 ## Releasing
 
 See [RELEASING](RELEASING.md) for instructions.
