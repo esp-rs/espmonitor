@@ -26,7 +26,7 @@ fn main() {
         Err(err) => {
             println!("Error: {}", err);
             println!();
-            if let Ok(_) = err.downcast::<pico_args::Error>() {
+            if err.downcast::<pico_args::Error>().is_ok() {
                 print_usage();
             }
             std::process::exit(1);

@@ -192,11 +192,11 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 
 fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     println!(concat!("ESPMonitor ", env!("CARGO_PKG_VERSION")));
-    println!("");
+    println!();
     println!("Commands:");
     println!("    CTRL+R    Reset chip");
     println!("    CTRL+C    Exit");
-    println!("");
+    println!();
 
     let speed = args.speed.unwrap_or(DEFAULT_BAUD_RATE);
     println!("Opening {} with speed {}", args.serial, speed);
@@ -247,7 +247,7 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(unix)]
 fn set_tty_raw() -> io::Result<Termios> {
     let orig_settings = Termios::from_fd(0)?;
-    let mut raw_settings = orig_settings.clone();
+    let mut raw_settings = orig_settings;
     cfmakeraw(&mut raw_settings);
     raw_settings.c_oflag |= OPOST; // Continue processing \n as \r\n for output
     raw_settings.c_lflag |= ISIG; // Allow signals (like ctrl+c -> SIGINT) through
@@ -274,9 +274,10 @@ fn reset_chip(dev: &mut SerialStream) -> io::Result<()> {
 
 fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
     let mut buf = [0; 32];
-    match io::stdin().read(&mut buf) {
-        Ok(bytes) if bytes > 0 => {
+    match io::stdin().read(&mut buf)? {
+        bytes if bytes > 0 => {
             for b in buf[0..bytes].iter() {
+                #[allow(clippy::single_match)]
                 match *b {
                     RESET_KEYCODE => reset_chip(&mut reader.dev)?,
                     _ => (),
@@ -284,8 +285,7 @@ fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
             }
             Ok(())
         },
-        Ok(_) => Ok(()),
-        Err(err) => Err(err.into()),
+        _ => Ok(()),
     }
 }
 
@@ -313,7 +313,7 @@ fn handle_serial(reader: &mut SerialReader) -> io::Result<()> {
                     };
 
                 if !full_line.is_empty() {
-                    let processed_line = process_line(&reader, full_line);
+                    let processed_line = process_line(reader, full_line);
                     println!("{}", processed_line);
                     reader.unfinished_line.clear();
                 }
@@ -331,7 +331,7 @@ fn handle_serial(reader: &mut SerialReader) -> io::Result<()> {
         },
         Ok(_) => Ok(()),
         Err(err) if err.kind() == ErrorKind::TimedOut => Ok(()),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(err),
     }
 }
 
