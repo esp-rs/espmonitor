@@ -1,6 +1,6 @@
 [package]
 name = "espmonitor"
-version = "0.3.0"
+version = "0.4.0"
 description = "Monitors ESP8266 and ESP32 execution over serial"
 license = "GPL-3.0"
 authors = [
@@ -37,3 +37,6 @@ regex = "1"
 
 [target.'cfg(unix)'.dependencies]
 termios = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+miow = "0.3"

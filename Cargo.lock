@@ -76,7 +76,7 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "cargo-espmonitor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cargo-project",
  "espmonitor",
@@ -118,11 +118,12 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "espmonitor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "lazy_static",
  "mio",
  "mio-serial",
+ "miow",
  "nix 0.22.1",
  "pico-args",
  "regex",
