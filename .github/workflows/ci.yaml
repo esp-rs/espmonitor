@@ -19,39 +19,25 @@ jobs:
           toolchain: stable
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets --all-features -- -D warnings
-  test-unix:
-    name: test-unix
-    runs-on: ubuntu-latest
+  test:
+    name: test
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
         rust:
           - stable
           - 1.45.0
-        target:
-          - x86_64-unknown-linux-gnu
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: test
-          args: --release --target=${{ matrix.target }}
-  test-windows:
-    name: test-windows
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - 1.45.0
-        target:
-          - x86_64-pc-windows-msvc
-          - x86_64-pc-windows-gnu
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
