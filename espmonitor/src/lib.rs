@@ -274,65 +274,66 @@ fn reset_chip(dev: &mut SerialStream) -> io::Result<()> {
 
 fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
     let mut buf = [0; 32];
-    match io::stdin().read(&mut buf)? {
-        bytes if bytes > 0 => {
-            for b in buf[0..bytes].iter() {
-                #[allow(clippy::single_match)]
-                match *b {
-                    RESET_KEYCODE => reset_chip(&mut reader.dev)?,
-                    _ => (),
+    loop {
+        match io::stdin().read(&mut buf)? {
+            bytes if bytes > 0 => {
+                for b in buf[0..bytes].iter() {
+                    #[allow(clippy::single_match)]
+                    match *b {
+                        RESET_KEYCODE => reset_chip(&mut reader.dev)?,
+                        _ => (),
+                    }
                 }
-            }
-            Ok(())
-        },
-        _ => Ok(()),
+            },
+            _ => return Ok(()),
+        }
     }
 }
 
 fn handle_serial(reader: &mut SerialReader) -> io::Result<()> {
     let mut buf = [0u8; 1024];
-    match reader.dev.read(&mut buf) {
-        Ok(bytes) if bytes > 0 => {
-            let data = String::from_utf8_lossy(&buf[0..bytes]);
-            let mut lines = data.split('\n').collect::<Vec<&str>>();
+    loop {
+        match reader.dev.read(&mut buf) {
+            Ok(bytes) if bytes > 0 => {
+                let data = String::from_utf8_lossy(&buf[0..bytes]);
+                let mut lines = data.split('\n').collect::<Vec<&str>>();
 
-            let new_unfinished_line =
-                if buf[bytes-1] != b'\n' {
-                    lines.pop()
-                } else {
-                    None
-                };
+                let new_unfinished_line =
+                   if buf[bytes - 1] != b'\n' {
+                       lines.pop()
+                   } else {
+                       None
+                   };
 
-            for line in lines {
-                let full_line =
-                    if !reader.unfinished_line.is_empty() {
-                        reader.unfinished_line.push_str(line);
-                        reader.unfinished_line.as_str()
-                    } else {
-                        line
-                    };
+                for line in lines {
+                    let full_line =
+                       if !reader.unfinished_line.is_empty() {
+                           reader.unfinished_line.push_str(line);
+                           reader.unfinished_line.as_str()
+                       } else {
+                           line
+                       };
 
-                if !full_line.is_empty() {
-                    let processed_line = process_line(reader, full_line);
-                    println!("{}", processed_line);
+                    if !full_line.is_empty() {
+                        let processed_line = process_line(reader, full_line);
+                        println!("{}", processed_line);
+                        reader.unfinished_line.clear();
+                    }
+                }
+
+                if let Some(nel) = new_unfinished_line {
+                    reader.unfinished_line.push_str(nel);
+                    reader.last_unfinished_line_at = Instant::now();
+                } else if !reader.unfinished_line.is_empty() && reader.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT {
+                    println!("{}", reader.unfinished_line);
                     reader.unfinished_line.clear();
                 }
-            }
-
-            if let Some(nel) = new_unfinished_line {
-                reader.unfinished_line.push_str(nel);
-                reader.last_unfinished_line_at = Instant::now();
-            } else if !reader.unfinished_line.is_empty() && reader.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT {
-                println!("{}", reader.unfinished_line);
-                reader.unfinished_line.clear();
-            }
-
-            Ok(())
-        },
-        Ok(_) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::TimedOut => Ok(()),
-        Err(err) if err.kind() == ErrorKind::WouldBlock =>  Ok(()),
-        Err(err) => Err(err),
+            },
+            Ok(_) => return Ok(()),
+            Err(err) if err.kind() == ErrorKind::TimedOut => return Ok(()),
+            Err(err) if err.kind() == ErrorKind::WouldBlock => return Ok(()),
+            Err(err) => return Err(err),
+        }
     }
 }
 
