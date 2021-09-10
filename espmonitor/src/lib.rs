@@ -331,6 +331,7 @@ fn handle_serial(reader: &mut SerialReader) -> io::Result<()> {
         },
         Ok(_) => Ok(()),
         Err(err) if err.kind() == ErrorKind::TimedOut => Ok(()),
+        Err(err) if err.kind() == ErrorKind::WouldBlock =>  Ok(()),
         Err(err) => Err(err),
     }
 }
