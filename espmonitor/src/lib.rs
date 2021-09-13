@@ -274,19 +274,18 @@ fn reset_chip(dev: &mut SerialStream) -> io::Result<()> {
 
 fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
     let mut buf = [0; 32];
-    loop {
-        match io::stdin().read(&mut buf)? {
-            bytes if bytes > 0 => {
-                for b in buf[0..bytes].iter() {
-                    #[allow(clippy::single_match)]
-                    match *b {
-                        RESET_KEYCODE => reset_chip(&mut reader.dev)?,
-                        _ => (),
-                    }
+    match io::stdin().read(&mut buf)? {
+        bytes if bytes > 0 => {
+            for b in buf[0..bytes].iter() {
+                #[allow(clippy::single_match)]
+                match *b {
+                    RESET_KEYCODE => reset_chip(&mut reader.dev)?,
+                    _ => (),
                 }
-            },
-            _ => return Ok(()),
-        }
+            }
+            Ok(())
+        },
+        _ => Ok(()),
     }
 }
 
