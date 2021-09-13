@@ -222,7 +222,13 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 
     poll.registry().register(&mut dev, SERIAL, Interest::READABLE)?;
     #[cfg(unix)]
-    poll.registry().register(&mut mio::unix::SourceFd(&0), STDIN, Interest::READABLE)?;
+    {
+        use nix::fcntl::{fcntl, FcntlArg::{F_GETFL, F_SETFL}, OFlag};
+        let flags = OFlag::O_NONBLOCK |
+            OFlag::from_bits(fcntl(0, F_GETFL)?).ok_or("F_GETFL returned invalid bits")?;
+        fcntl(0, F_SETFL(flags))?;
+        poll.registry().register(&mut mio::unix::SourceFd(&0), STDIN, Interest::READABLE)?;
+    }
 
     let mut serial_reader = SerialReader {
         dev,
@@ -275,8 +281,8 @@ fn reset_chip(dev: &mut SerialStream) -> io::Result<()> {
 fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
     let mut buf = [0; 32];
     loop {
-        match io::stdin().read(&mut buf)? {
-            bytes if bytes > 0 => {
+        match io::stdin().read(&mut buf) {
+            Ok(bytes) if bytes > 0 => {
                 for b in buf[0..bytes].iter() {
                     #[allow(clippy::single_match)]
                     match *b {
@@ -285,6 +291,10 @@ fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
                     }
                 }
             },
+            Err(e) => match e.kind() {
+                io::ErrorKind::WouldBlock => return Ok(()),
+                _ => return Err(e),
+            }
             _ => return Ok(()),
         }
     }
