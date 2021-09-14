@@ -15,31 +15,37 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
+use crossterm::{
+    event::{self, Event, KeyCode, KeyModifiers},
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
 use lazy_static::lazy_static;
-use mio::{Interest, Poll, Token, event::Events};
-use mio_serial::{SerialPort, SerialPortBuilderExt, SerialStream};
+use serial::{self, BaudRate, SerialPort, SystemPort};
 use regex::Regex;
-use std::{ffi::OsString, ffi::OsStr, path::Path, process::Stdio, time::Instant};
-use std::io::{self, Error as IoError, ErrorKind, Read, Write};
-use std::process::Command;
-use std::time::Duration;
+use std::{
+    ffi::{OsString, OsStr},
+    io::{self, Error as IoError, ErrorKind, Read, Write},
+    path::Path,
+    process::{Command, Stdio, exit},
+    sync::{Arc, Mutex},
+    thread::{self, sleep},
+    time::{Duration, Instant},
+};
 
-#[cfg(unix)]
-use termios::{ISIG, OPOST, TCSAFLUSH, Termios, cfmakeraw, tcsetattr};
-
-const DEFAULT_BAUD_RATE: u32 = 115_200;
+const DEFAULT_BAUD_RATE: BaudRate = BaudRate::Baud115200;
 const UNFINISHED_LINE_TIMEOUT: Duration = Duration::from_secs(5);
-
-const SERIAL: Token = Token(0);
-const STDIN: Token = Token(1);
-
-const RESET_KEYCODE: u8 = 18;
 
 lazy_static! {
     static ref FUNC_ADDR_RE: Regex = Regex::new(r"0x4[0-9a-f]{7}")
         .expect("Failed to parse program address regex");
     static ref ADDR2LINE_RE: Regex = Regex::new(r"^0x[0-9a-f]+:\s+([^ ]+)\s+at\s+(\?\?|[0-9]+):(\?|[0-9]+)")
         .expect("Failed to parse addr2line output regex");
+}
+
+macro_rules! rprintln {
+    () => (print!("\r\n"));
+    ($fmt:literal) => (print!(concat!($fmt, "\r\n")));
+    ($fmt:literal, $($arg:tt)+) => (print!(concat!($fmt, "\r\n"), $($arg)*));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -146,13 +152,12 @@ pub struct AppArgs {
     pub serial: String,
     pub chip: Chip,
     pub framework: Framework,
-    pub speed: Option<u32>,
+    pub speed: Option<usize>,
     pub reset: bool,
     pub bin: Option<OsString>,
 }
 
-struct SerialReader {
-    dev: SerialStream,
+struct SerialState {
     unfinished_line: String,
     last_unfinished_line_at: Instant,
     bin: Option<OsString>,
@@ -162,20 +167,19 @@ struct SerialReader {
 #[cfg(unix)]
 pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     use nix::{sys::wait::{WaitStatus, waitpid}, unistd::{ForkResult, fork}};
-    use std::process::exit;
 
-    let orig_tty_settings = set_tty_raw()?;
+    enable_raw_mode()?;
 
     match unsafe { fork() } {
         Err(err) => Err(err.into()),
         Ok(ForkResult::Parent { child }) => loop {
             match waitpid(child, None) {
                 Ok(WaitStatus::Exited(_, status)) => {
-                    restore_tty(&orig_tty_settings);
+                    disable_raw_mode()?;
                     exit(status);
                 },
                 Ok(WaitStatus::Signaled(_, _, _)) => {
-                    restore_tty(&orig_tty_settings);
+                    disable_raw_mode()?;
                     exit(255);
                 },
                 _ => (),
@@ -187,29 +191,34 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(windows)]
 pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
-    run_child(args)
+    enable_raw_mode()?;
+    let result = run_child(args);
+    disable_raw_mode()?;
+    result
 }
 
 fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
-    println!(concat!("ESPMonitor ", env!("CARGO_PKG_VERSION")));
-    println!();
-    println!("Commands:");
-    println!("    CTRL+R    Reset chip");
-    println!("    CTRL+C    Exit");
-    println!();
+    rprintln!("ESPMonitor {}", env!("CARGO_PKG_VERSION"));
+    rprintln!();
+    rprintln!("Commands:");
+    rprintln!("    CTRL+R    Reset chip");
+    rprintln!("    CTRL+C    Exit");
+    rprintln!();
 
-    let speed = args.speed.unwrap_or(DEFAULT_BAUD_RATE);
-    println!("Opening {} with speed {}", args.serial, speed);
+    let speed = args.speed.map(BaudRate::from_speed).unwrap_or(DEFAULT_BAUD_RATE);
+    rprintln!("Opening {} with speed {}", args.serial, speed.speed());
 
-    let mut dev = mio_serial::new(args.serial, speed)
-        .timeout(Duration::from_millis(200))
-        .open_native_async()?;
+    let mut dev = serial::open(&args.serial)?;
+    dev.set_timeout(Duration::from_millis(200))?;
+    dev.reconfigure(&|settings| {
+        settings.set_baud_rate(speed)
+    })?;
 
     if let Some(bin) = args.bin.as_ref() {
         if Path::new(bin).exists() {
-            println!("Using {} as flash image", bin.to_string_lossy());
+            rprintln!("Using {} as flash image", bin.to_string_lossy());
         } else {
-            eprintln!("WARNING: Flash image {} does not exist (you may need to build it)", bin.to_string_lossy());
+            rprintln!("WARNING: Flash image {} does not exist (you may need to build it)", bin.to_string_lossy());
         }
     }
 
@@ -217,142 +226,124 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
         reset_chip(&mut dev)?;
     }
 
-    let mut poll = Poll::new()?;
-    let mut events = Events::with_capacity(512);
+    let dev = Arc::new(Mutex::new(dev));
 
-    poll.registry().register(&mut dev, SERIAL, Interest::READABLE)?;
-    #[cfg(unix)]
-    {
-        use nix::fcntl::{fcntl, FcntlArg::{F_GETFL, F_SETFL}, OFlag};
-        let flags = OFlag::O_NONBLOCK |
-            OFlag::from_bits(fcntl(0, F_GETFL)?).ok_or("F_GETFL returned invalid bits")?;
-        fcntl(0, F_SETFL(flags))?;
-        poll.registry().register(&mut mio::unix::SourceFd(&0), STDIN, Interest::READABLE)?;
-    }
+    let _input_thread = {
+        let dev = Arc::clone(&dev);
+        thread::spawn(||
+            if stdin_thread_fn(dev).is_err() {
+                exit(1);
+            }
+        )
+    };
 
-    let mut serial_reader = SerialReader {
-        dev,
+    let mut serial_state = SerialState {
         unfinished_line: String::new(),
         last_unfinished_line_at: Instant::now(),
         bin: args.bin.take(),
         tool_prefix: args.chip.tool_prefix(),
     };
 
+    let mut buf = [0u8; 1024];
     loop {
-        poll.poll(&mut events, None)?;
-        for event in events.iter() {
-            match event.token() {
-                STDIN => handle_stdin(&mut serial_reader)?,
-                SERIAL => handle_serial(&mut serial_reader)?,
-                _ => (),
-            }
+        let bytes = match dev.lock().unwrap().read(&mut buf) {
+            Ok(bytes) if bytes > 0 => Some(bytes),
+            Ok(_) => None,
+            Err(err) if err.kind() == ErrorKind::TimedOut => None,
+            Err(err) if err.kind() == ErrorKind::WouldBlock => None,
+            Err(err) => break Err(err.into()),
+        };
+
+        if let Some(bytes) = bytes {
+            handle_serial(&mut serial_state, &buf[0..bytes])?;
+        } else {
+            // Give the stdin thread a chance to wake up and lock if it wants to
+            sleep(Duration::from_millis(25));
         }
     }
 }
 
-#[cfg(unix)]
-fn set_tty_raw() -> io::Result<Termios> {
-    let orig_settings = Termios::from_fd(0)?;
-    let mut raw_settings = orig_settings;
-    cfmakeraw(&mut raw_settings);
-    raw_settings.c_oflag |= OPOST; // Continue processing \n as \r\n for output
-    raw_settings.c_lflag |= ISIG; // Allow signals (like ctrl+c -> SIGINT) through
-    tcsetattr(0, TCSAFLUSH, &raw_settings)?;
-    Ok(orig_settings)
-}
-
-#[cfg(unix)]
-fn restore_tty(settings: &Termios) {
-    if let Err(err) = tcsetattr(0, TCSAFLUSH, settings) {
-        eprintln!("Failed to return terminal to cooked mode: {}", err);
-    }
-}
-
-fn reset_chip(dev: &mut SerialStream) -> io::Result<()> {
+fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
     print!("Resetting device... ");
     std::io::stdout().flush()?;
-    dev.write_data_terminal_ready(false)?;
-    dev.write_request_to_send(true)?;
-    dev.write_request_to_send(false)?;
-    println!("done");
+    dev.set_dtr(false)?;
+    dev.set_rts(true)?;
+    dev.set_rts(false)?;
+    rprintln!("done");
     Ok(())
 }
 
-fn handle_stdin(reader: &mut SerialReader) -> io::Result<()> {
-    let mut buf = [0; 32];
+fn stdin_thread_fn(dev: Arc<Mutex<SystemPort>>) -> io::Result<()> {
     loop {
-        match io::stdin().read(&mut buf) {
-            Ok(bytes) if bytes > 0 => {
-                for b in buf[0..bytes].iter() {
-                    #[allow(clippy::single_match)]
-                    match *b {
-                        RESET_KEYCODE => reset_chip(&mut reader.dev)?,
-                        _ => (),
+        if event::poll(Duration::from_millis(250))? {
+            match event::read() {
+                Ok(Event::Key(key_event)) => {
+                    if key_event.modifiers == KeyModifiers::CONTROL {
+                        match key_event.code {
+                            KeyCode::Char('r') => {
+                                let mut dev = dev.lock().unwrap();
+                                reset_chip(&mut dev)?;
+                            },
+                            KeyCode::Char('c') => exit(0),
+                            _ => (),
+                        }
                     }
-                }
-            },
-            Err(e) => match e.kind() {
-                io::ErrorKind::WouldBlock => return Ok(()),
-                _ => return Err(e),
+                },
+                Ok(_) => (),
+                Err(err) => {
+                    rprintln!("Error reading from terminal: {}", err);
+                    break Err(err);
+                },
             }
-            _ => return Ok(()),
         }
     }
 }
 
-fn handle_serial(reader: &mut SerialReader) -> io::Result<()> {
-    let mut buf = [0u8; 1024];
-    loop {
-        match reader.dev.read(&mut buf) {
-            Ok(bytes) if bytes > 0 => {
-                let data = String::from_utf8_lossy(&buf[0..bytes]);
-                let mut lines = data.split('\n').collect::<Vec<&str>>();
+fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
+    let data = String::from_utf8_lossy(buf);
+    let mut lines = data.split('\n').collect::<Vec<&str>>();
 
-                let new_unfinished_line =
-                   if buf[bytes - 1] != b'\n' {
-                       lines.pop()
-                   } else {
-                       None
-                   };
+    let new_unfinished_line =
+        if data.ends_with('\n') {
+            None
+        } else {
+            lines.pop()
+        };
 
-                for line in lines {
-                    let full_line =
-                       if !reader.unfinished_line.is_empty() {
-                           reader.unfinished_line.push_str(line);
-                           reader.unfinished_line.as_str()
-                       } else {
-                           line
-                       };
+    for line in lines {
+        let full_line =
+            if !state.unfinished_line.is_empty() {
+                state.unfinished_line.push_str(line);
+                state.unfinished_line.as_str()
+            } else {
+                line
+            };
 
-                    if !full_line.is_empty() {
-                        let processed_line = process_line(reader, full_line);
-                        println!("{}", processed_line);
-                        reader.unfinished_line.clear();
-                    }
-                }
-
-                if let Some(nel) = new_unfinished_line {
-                    reader.unfinished_line.push_str(nel);
-                    reader.last_unfinished_line_at = Instant::now();
-                } else if !reader.unfinished_line.is_empty() && reader.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT {
-                    println!("{}", reader.unfinished_line);
-                    reader.unfinished_line.clear();
-                }
-            },
-            Ok(_) => return Ok(()),
-            Err(err) if err.kind() == ErrorKind::TimedOut => return Ok(()),
-            Err(err) if err.kind() == ErrorKind::WouldBlock => return Ok(()),
-            Err(err) => return Err(err),
+        if !full_line.is_empty() {
+            let processed_line = process_line(state, full_line);
+            rprintln!("{}", processed_line);
+            state.unfinished_line.clear();
         }
     }
+
+    if let Some(nel) = new_unfinished_line {
+        state.unfinished_line.push_str(nel);
+        state.last_unfinished_line_at = Instant::now();
+    } else if !state.unfinished_line.is_empty() && state.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT {
+        let processed_line = process_line(state, &state.unfinished_line);
+        rprintln!("{}", processed_line);
+        state.unfinished_line.clear();
+    }
+
+    Ok(())
 }
 
-fn process_line(reader: &SerialReader, line: &str) -> String {
+fn process_line(state: &SerialState, line: &str) -> String {
     let mut updated_line = line.to_string();
 
-    if let Some(bin) = reader.bin.as_ref() {
+    if let Some(bin) = state.bin.as_ref() {
         for mat in FUNC_ADDR_RE.find_iter(line) {
-            let cmd = format!("{}addr2line", reader.tool_prefix);
+            let cmd = format!("{}addr2line", state.tool_prefix);
             if let Some(output) = Command::new(&cmd)
                 .args(&[OsStr::new("-pfiaCe"), bin, OsStr::new(mat.as_str())])
                 .stdout(Stdio::piped())

@@ -133,7 +133,7 @@ fn parse_args(args: Vec<OsString>) -> Result<Option<CargoAppArgs>, Box<dyn Error
                     chip,
                     framework,
                     reset: args.contains("--reset") || !args.contains("--no-reset"),
-                    speed: args.opt_value_from_fn("--speed", |s| s.parse::<u32>())?,
+                    speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
                     bin: Some(bin.as_os_str().to_os_string()),
                     serial: args.free_from_str()?,
                 }
