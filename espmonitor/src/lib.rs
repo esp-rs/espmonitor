@@ -68,7 +68,10 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode()?;
 
     match unsafe { fork() } {
-        Err(err) => Err(err.into()),
+        Err(err) => {
+            disable_raw_mode()?;
+            Err(err.into())
+        },
         Ok(ForkResult::Parent { child }) => loop {
             match waitpid(child, None) {
                 Ok(WaitStatus::Exited(_, status)) => {
@@ -81,7 +84,7 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
                 },
                 _ => (),
             }
-        }
+        },
         Ok(ForkResult::Child) => run_child(args),
     }
 }
