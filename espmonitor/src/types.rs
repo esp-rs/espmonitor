@@ -102,15 +102,6 @@ impl Chip {
         });
         target
     }
-
-    pub fn tool_prefix(&self) -> &'static str {
-        match self {
-            Chip::ESP32 => "xtensa-esp32-elf-",
-            Chip::ESP32S2 => "xtensa-esp32s2-elf-",
-            Chip::ESP8266 => "xtensa-esp8266-elf-",
-            Chip::ESP32C3 => "riscv32imc-unknown-none-elf-",
-        }
-    }
 }
 
 impl TryFrom<&str> for Chip {
