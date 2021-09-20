@@ -55,7 +55,7 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "cargo-espmonitor"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cargo-project",
  "espmonitor",
@@ -64,9 +64,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-project"
-version = "0.2.4"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b735b1b2cf3bc8eed47b20da5ba5b8b33f343700d367e4e536b6f3054ecbd3a"
+checksum = "93077a21196fc89d2dc73976fce26e31461f45f3109881c6b4481c3cd8e58fbd"
 dependencies = [
  "failure",
  "glob",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "espmonitor"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "crossterm",
  "lazy_static",
@@ -186,9 +186,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.101"
+version = "0.2.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cb00336871be5ed2c8ed44b60ae9959dc5b9f08539422ed43f09e34ecaeba21"
+checksum = "a2a5ac8f984bfcf3a823267e5fde638acc3325f6496633a5da6bb6eb2171e103"
 
 [[package]]
 name = "lock_api"
