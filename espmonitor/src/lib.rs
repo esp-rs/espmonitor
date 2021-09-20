@@ -16,7 +16,7 @@
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use lazy_static::lazy_static;
@@ -27,8 +27,6 @@ use std::{
     io::{self, ErrorKind, Read, Write},
     path::Path,
     process::{Command, Stdio, exit},
-    sync::{Arc, Mutex},
-    thread::{self, sleep},
     time::{Duration, Instant},
 };
 
@@ -126,17 +124,6 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
         reset_chip(&mut dev)?;
     }
 
-    let dev = Arc::new(Mutex::new(dev));
-
-    let _input_thread = {
-        let dev = Arc::clone(&dev);
-        thread::spawn(||
-            if stdin_thread_fn(dev).is_err() {
-                exit(1);
-            }
-        )
-    };
-
     let mut serial_state = SerialState {
         unfinished_line: String::new(),
         last_unfinished_line_at: Instant::now(),
@@ -146,19 +133,20 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut buf = [0u8; 1024];
     loop {
-        let bytes = match dev.lock().unwrap().read(&mut buf) {
-            Ok(bytes) if bytes > 0 => Some(bytes),
-            Ok(_) => None,
-            Err(err) if err.kind() == ErrorKind::TimedOut => None,
-            Err(err) if err.kind() == ErrorKind::WouldBlock => None,
+        match dev.read(&mut buf) {
+            Ok(bytes) if bytes > 0 => handle_serial(&mut serial_state, &buf[0..bytes])?,
+            Ok(_) => (),
+            Err(err) if err.kind() == ErrorKind::TimedOut => (),
+            Err(err) if err.kind() == ErrorKind::WouldBlock => (),
             Err(err) => break Err(err.into()),
-        };
+        }
 
-        if let Some(bytes) = bytes {
-            handle_serial(&mut serial_state, &buf[0..bytes])?;
-        } else {
-            // Give the stdin thread a chance to wake up and lock if it wants to
-            sleep(Duration::from_millis(25));
+        while event::poll(Duration::ZERO)? {
+            match event::read() {
+                Ok(Event::Key(key_event)) => handle_input(&mut dev, key_event)?,
+                Ok(_) => (),
+                Err(err) => return Err(err.into()),
+            }
         }
     }
 }
@@ -171,32 +159,6 @@ fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
     dev.set_rts(false)?;
     rprintln!("done");
     Ok(())
-}
-
-fn stdin_thread_fn(dev: Arc<Mutex<SystemPort>>) -> io::Result<()> {
-    loop {
-        if event::poll(Duration::from_millis(250))? {
-            match event::read() {
-                Ok(Event::Key(key_event)) => {
-                    if key_event.modifiers == KeyModifiers::CONTROL {
-                        match key_event.code {
-                            KeyCode::Char('r') => {
-                                let mut dev = dev.lock().unwrap();
-                                reset_chip(&mut dev)?;
-                            },
-                            KeyCode::Char('c') => exit(0),
-                            _ => (),
-                        }
-                    }
-                },
-                Ok(_) => (),
-                Err(err) => {
-                    rprintln!("Error reading from terminal: {}", err);
-                    break Err(err);
-                },
-            }
-        }
-    }
 }
 
 fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
@@ -260,4 +222,16 @@ fn process_line(state: &SerialState, line: &str) -> String {
     }
 
     updated_line
+}
+
+fn handle_input(dev: &mut SystemPort, key_event: KeyEvent) -> io::Result<()> {
+    if key_event.modifiers == KeyModifiers::CONTROL {
+        match key_event.code {
+            KeyCode::Char('r') => reset_chip(dev),
+            KeyCode::Char('c') => exit(0),
+            _ => Ok(()),
+        }
+    } else {
+        Ok(())
+    }
 }
