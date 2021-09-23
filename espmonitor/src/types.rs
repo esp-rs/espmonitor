@@ -62,6 +62,7 @@ pub enum Chip {
     ESP32,
     ESP32S2,
     ESP8266,
+    ESP32C3,
 }
 
 impl Chip {
@@ -81,11 +82,19 @@ impl Chip {
 
 impl Chip {
     pub fn target(&self, framework: Framework) -> String {
-        let mut target = String::from("xtensa-");
+        let mut target = String::new();
+        target.push_str(match self {
+            Chip::ESP32C3 => "riscv32imc-",
+            _ => "xtensa-",
+        });
         target.push_str(match self {
             Chip::ESP32 => "esp32-",
             Chip::ESP32S2 => "esp32s2-",
             Chip::ESP8266 => "esp8266-",
+            Chip::ESP32C3 => match framework {
+                Framework::Baremetal => "unknown-",
+                Framework::EspIdf => "esp-"
+            }
         });
         target.push_str(match framework {
             Framework::Baremetal => "none-elf",
@@ -99,6 +108,7 @@ impl Chip {
             Chip::ESP32 => "xtensa-esp32-elf-",
             Chip::ESP32S2 => "xtensa-esp32s2-elf-",
             Chip::ESP8266 => "xtensa-esp8266-elf-",
+            Chip::ESP32C3 => "riscv32imc-unknown-none-elf-",
         }
     }
 }
@@ -108,6 +118,7 @@ impl TryFrom<&str> for Chip {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "esp32" => Ok(Chip::ESP32),
+            "esp32c3" => Ok(Chip::ESP32C3),
             "esp8266" => Ok(Chip::ESP8266),
             _ => Err(IoError::new(ErrorKind::InvalidInput, format!("'{}' is not a valid chip", value))),
         }
