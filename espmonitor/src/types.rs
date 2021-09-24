@@ -75,7 +75,7 @@ impl Chip {
         } else if target.contains("-esp8266-") {
             Ok(Chip::ESP8266)
         } else {
-            Err(IoError::new(ErrorKind::InvalidInput, format!("Can't figure out chip from target '{}'", target)))
+            Err(IoError::new(ErrorKind::InvalidInput, format!("Can't figure out chip from target '{}'; try specifying the --chip option", target)))
         }
     }
 }
