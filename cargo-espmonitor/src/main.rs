@@ -150,7 +150,7 @@ fn print_usage() {
         \x20   --example EXAMPLE               If flashing, flash this example app\n\
         \x20   --features FEATURES             If flashing, build with these features first\n\
         \x20   --target TARGET                 Infer chip and framework from target triple\n\
-        \x20   --chip {esp32|esp8266}          Which ESP chip to target\n\
+        \x20   --chip {esp32|esp32c3|esp8266}  Which ESP chip to target\n\
         \x20   --framework {baremetal,esp-idf} Which framework to target\n\
         \x20   --release                       Use the release build\n\
         \x20   --example EXAMPLE               Use the named example app binary\n\

@@ -56,12 +56,12 @@ fn parse_args() -> Result<Option<AppArgs>, Box<dyn Error>> {
 fn print_usage() {
     let usage = "Usage: espmonitor [OPTIONS] SERIAL_DEVICE\n\
         \n\
-        \x20   --chip {esp32|esp8266}   Which ESP chip to target\n\
-        \x20   --reset                  Reset the chip on start (default)\n\
-        \x20   --no-reset               Do not reset thechip on start\n\
-        \x20   --speed BAUD             Baud rate of serial device (default: 115200)\n\
-        \x20   --bin BINARY             Path to executable matching what is on the device\n\
-        \x20   SERIAL_DEVICE            Path to the serial device";
+        \x20   --chip {esp32|esp32c3|esp8266}   Which ESP chip to target\n\
+        \x20   --reset                          Reset the chip on start (default)\n\
+        \x20   --no-reset                       Do not reset thechip on start\n\
+        \x20   --speed BAUD                     Baud rate of serial device (default: 115200)\n\
+        \x20   --bin BINARY                     Path to executable matching what is on the device\n\
+        \x20   SERIAL_DEVICE                    Path to the serial device";
 
     println!("{}", usage);
 }
