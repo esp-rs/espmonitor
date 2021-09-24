@@ -28,6 +28,7 @@ path = "src/main.rs"
 [lib]
 
 [dependencies]
+addr2line = "0.16.0"
 crossterm = "0.21"
 lazy_static = "1"
 pico-args = "0.4"

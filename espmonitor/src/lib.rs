@@ -15,6 +15,13 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
+use addr2line::{
+    Context,
+    fallible_iterator::FallibleIterator,
+    gimli::{EndianReader, RunTimeEndian},
+    object,
+};
+
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -27,8 +34,10 @@ use std::{
     io::{self, ErrorKind, Read, Write},
     path::Path,
     process::{Command, Stdio, exit},
+    rc::Rc,
     time::{Duration, Instant},
 };
+
 
 mod types;
 
@@ -52,11 +61,12 @@ macro_rules! rprintln {
     ($fmt:literal, $($arg:tt)+) => (print!(concat!($fmt, "\r\n"), $($arg)*));
 }
 
+type AddrLookupContext = Context<EndianReader<RunTimeEndian, Rc<[u8]>>>;
+
 struct SerialState {
     unfinished_line: String,
     last_unfinished_line_at: Instant,
-    bin: Option<OsString>,
-    tool_prefix: &'static str,
+    lookup_context: Option<AddrLookupContext>,
 }
 
 #[cfg(unix)]
@@ -95,6 +105,19 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     result
 }
 
+fn get_lookup_context_from_file(bin: &OsString) -> Result<AddrLookupContext, String> {
+    match fs::read(bin) {
+        Ok(bin_contents) => match object::File::parse(&*bin_contents) {
+            Ok(obj) => match Context::new(&obj) {
+                Ok(context) => Ok(context),
+                Err(e) => Err(e.to_string()),
+            },
+            Err(e) => Err(e.to_string()),
+        },
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     rprintln!("ESPMonitor {}", env!("CARGO_PKG_VERSION"));
     rprintln!();
@@ -112,13 +135,19 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
         settings.set_baud_rate(speed)
     })?;
 
-    if let Some(bin) = args.bin.as_ref() {
-        if Path::new(bin).exists() {
-            rprintln!("Using {} as flash image", bin.to_string_lossy());
-        } else {
-            rprintln!("WARNING: Flash image {} does not exist (you may need to build it)", bin.to_string_lossy());
-        }
-    }
+    let lookup_context = match args.bin.as_ref() {
+        Some(bin) => match get_lookup_context_from_file(bin) {
+            Ok(ctx) => {
+                rprintln!("Using {} as flash image", bin.to_string_lossy());
+                Some(ctx)
+            }
+            Err(s) => {
+                rprintln!("WARNING: failed to load flash image {}: {}", bin.to_string_lossy(), s);
+                None
+            }
+        },
+        _ => None,
+    };
 
     if args.reset {
         reset_chip(&mut dev)?;
@@ -127,8 +156,7 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut serial_state = SerialState {
         unfinished_line: String::new(),
         last_unfinished_line_at: Instant::now(),
-        bin: args.bin.take(),
-        tool_prefix: args.chip.tool_prefix(),
+        lookup_context,
     };
 
     let mut buf = [0u8; 1024];
@@ -200,23 +228,40 @@ fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+fn process_address(context: &AddrLookupContext, addr: u64) -> Option<Vec<String>>  {
+    if let Ok(frames) = context.find_frames(addr) {
+        frames.map(|frame| {
+
+            let func_str = frame.function.as_ref().and_then(|f| f.demangle().map(|s| s.into_owned()).ok())
+                .unwrap_or(format!("??"));
+
+            let file_str = frame.location.as_ref().and_then(|l| l.file).map(|v| format!("{}", v))
+                .unwrap_or(format!("??"));
+
+            let line_str = frame.location.as_ref().and_then(|l| l.line).map(|v| format!("{}", v))
+                .unwrap_or(format!("?"));
+
+            Ok(format!("[{}:{}:{}]", func_str, file_str, line_str))
+        })
+        .collect::<Vec<_>>()
+        .ok()
+    } else {
+        None
+    }
+}
+
 fn process_line(state: &SerialState, line: &str) -> String {
     let mut updated_line = line.to_string();
 
-    if let Some(bin) = state.bin.as_ref() {
+    if let Some(context) = state.lookup_context.as_ref() {
         for mat in FUNC_ADDR_RE.find_iter(line) {
-            let cmd = format!("{}addr2line", state.tool_prefix);
-            if let Some(output) = Command::new(&cmd)
-                .args(&[OsStr::new("-pfiaCe"), bin, OsStr::new(mat.as_str())])
-                .stdout(Stdio::piped())
-                .output()
-                .ok()
-                .and_then(|output| String::from_utf8(output.stdout).ok())
-            {
-                if let Some(caps) = ADDR2LINE_RE.captures(&output) {
-                    let name = format!("{} [{}:{}:{}]", mat.as_str().to_string(), caps[1].to_string(), caps[2].to_string(), caps[3].to_string());
-                    updated_line = updated_line.replace(mat.as_str(), &name);
-                }
+            let addr_str = mat.as_str();
+
+            // note: unwrap the parse because it should *always* be successful
+            let addr = u64::from_str_radix(&addr_str[2..], 16).unwrap();
+
+            if let Some(lookup) = process_address(context, addr) {
+                updated_line = updated_line.replace(addr_str, &format!("{} [{}]", addr_str, lookup[0]));
             }
         }
     }
