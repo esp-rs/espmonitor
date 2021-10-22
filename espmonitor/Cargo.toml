@@ -28,7 +28,7 @@ path = "src/main.rs"
 [lib]
 
 [dependencies]
-crossterm = "0.21"
+crossterm = "0.22"
 lazy_static = "1"
 pico-args = "0.4"
 regex = "1"
