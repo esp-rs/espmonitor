@@ -35,4 +35,4 @@ regex = "1"
 serial = "0.4"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.22"
+nix = "0.23"
