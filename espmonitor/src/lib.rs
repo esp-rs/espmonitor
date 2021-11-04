@@ -46,8 +46,6 @@ lazy_static! {
         .expect("Failed to parse line separator regex");
     static ref FUNC_ADDR_RE: Regex = Regex::new(r"0x4[0-9a-f]{7}")
         .expect("Failed to parse program address regex");
-    static ref ADDR2LINE_RE: Regex = Regex::new(r"^0x[0-9a-f]+:\s+([^ ]+)\s+at\s+(\?\?|[0-9]+):(\?|[0-9]+)")
-        .expect("Failed to parse addr2line output regex");
 }
 
 macro_rules! rprintln {
