@@ -17,7 +17,9 @@
 
 use addr2line::Context;
 use crossterm::{
+    QueueableCommand,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    style::{Color, Print, PrintStyledContent, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use gimli::{read::Reader, EndianRcSlice, RunTimeEndian};
@@ -27,7 +29,7 @@ use regex::Regex;
 use serial::{self, BaudRate, SerialPort, SystemPort};
 use std::{
     fs,
-    io::{self, ErrorKind, Read, Write},
+    io::{self, ErrorKind, Read, Write, stdout},
     process::exit,
     time::{Duration, Instant},
 };
@@ -148,10 +150,11 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
         symbols,
     };
 
+    let mut output = stdout();
     let mut buf = [0u8; 1024];
     loop {
         match dev.read(&mut buf) {
-            Ok(bytes) if bytes > 0 => handle_serial(&mut serial_state, &buf[0..bytes])?,
+            Ok(bytes) if bytes > 0 => handle_serial(&mut serial_state, &buf[0..bytes], &mut output)?,
             Ok(_) => if dev.read_dsr().is_err() {
                 rprintln!("Device disconnected; exiting");
                 break Ok(());
@@ -190,7 +193,7 @@ fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
     Ok(())
 }
 
-fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
+fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write) -> io::Result<()> {
     let data = String::from_utf8_lossy(buf);
     let mut lines = LINE_SEP_RE.split(&data).collect::<Vec<&str>>();
 
@@ -211,8 +214,7 @@ fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
             };
 
         if !full_line.is_empty() {
-            let processed_line = process_line(state, full_line);
-            rprintln!("{}", processed_line);
+            output_line(state, full_line, output)?;
             state.unfinished_line.clear();
         }
     }
@@ -221,25 +223,24 @@ fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
         state.unfinished_line.push_str(nel);
         state.last_unfinished_line_at = Instant::now();
     } else if !state.unfinished_line.is_empty() && state.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT {
-        let processed_line = process_line(state, &state.unfinished_line);
-        rprintln!("{}", processed_line);
+        output_line(state, &state.unfinished_line, output)?;
         state.unfinished_line.clear();
     }
 
     Ok(())
 }
 
-fn process_line(state: &SerialState, line: &str) -> String {
-    let mut updated_line = line.to_string();
-
+fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> io::Result<()> {
     if let Some(symbols) = state.symbols.as_ref() {
+        let mut cur_start_offset = 0;
+
         for mat in FUNC_ADDR_RE.find_iter(line) {
-            let (function, file, line) = u64::from_str_radix(&mat.as_str()[2..], 16)
+            let (function, file, lineno) = u64::from_str_radix(&mat.as_str()[2..], 16)
                 .ok()
                 .map(|addr| {
                     let function = find_function_name(symbols, addr);
-                    let (file, line) = find_location(symbols, addr);
-                    (function, file, line)
+                    let (file, lineno) = find_location(symbols, addr);
+                    (function, file, lineno)
                 })
                 .unwrap_or((None, None, None));
 
@@ -247,12 +248,24 @@ fn process_line(state: &SerialState, line: &str) -> String {
                 s.unwrap_or_else(|| "??".to_string())
             }
 
-            let name = format!("{} [{}:{}:{}]", mat.as_str(), or_qq(function), or_qq(file), or_qq(line.map(|l| l.to_string())));
-            updated_line = updated_line.replace(mat.as_str(), &name);
+            output.queue(Print(line[cur_start_offset..mat.end()].to_string()))?;
+            cur_start_offset = mat.end();
+            let symbolicated_name = format!(" [{}:{}:{}]", or_qq(function), or_qq(file), or_qq(lineno.map(|l| l.to_string())))
+                .with(Color::Yellow);
+            output.queue(PrintStyledContent(symbolicated_name))?;
         }
+
+        if cur_start_offset < line.len() {
+            output.queue(Print(line[cur_start_offset..line.len()].to_string()))?;
+        }
+    } else {
+        output.queue(Print(line.to_string()))?;
     }
 
-    updated_line
+    output.write_all(b"\r\n")?;
+    output.flush()?;
+
+    Ok(())
 }
 
 fn handle_input(dev: &mut SystemPort, key_event: KeyEvent) -> io::Result<()> {
