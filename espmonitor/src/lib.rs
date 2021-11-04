@@ -15,18 +15,20 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
+use addr2line::Context;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
+use gimli::{read::Reader, EndianRcSlice, RunTimeEndian};
 use lazy_static::lazy_static;
-use serial::{self, BaudRate, SerialPort, SystemPort};
+use object::read::Object;
 use regex::Regex;
+use serial::{self, BaudRate, SerialPort, SystemPort};
 use std::{
-    ffi::{OsString, OsStr},
+    fs,
     io::{self, ErrorKind, Read, Write},
-    path::Path,
-    process::{Command, Stdio, exit},
+    process::exit,
     time::{Duration, Instant},
 };
 
@@ -52,11 +54,15 @@ macro_rules! rprintln {
     ($fmt:literal, $($arg:tt)+) => (print!(concat!($fmt, "\r\n"), $($arg)*));
 }
 
-struct SerialState {
+struct Symbols<'a> {
+    obj: object::read::File<'a, &'a [u8]>,
+    context: Context<EndianRcSlice<RunTimeEndian>>,
+}
+
+struct SerialState<'a> {
     unfinished_line: String,
     last_unfinished_line_at: Instant,
-    bin: Option<OsString>,
-    tool_prefix: &'static str,
+    symbols: Option<Symbols<'a>>,
 }
 
 #[cfg(unix)]
@@ -95,7 +101,7 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     result
 }
 
-fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
+fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     rprintln!("ESPMonitor {}", env!("CARGO_PKG_VERSION"));
     rprintln!();
     rprintln!("Commands:");
@@ -112,23 +118,34 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
         settings.set_baud_rate(speed)
     })?;
 
-    if let Some(bin) = args.bin.as_ref() {
-        if Path::new(bin).exists() {
-            rprintln!("Using {} as flash image", bin.to_string_lossy());
-        } else {
-            rprintln!("WARNING: Flash image {} does not exist (you may need to build it)", bin.to_string_lossy());
-        }
-    }
+    let bin_data = args.bin.as_ref().and_then(|bin_name| match fs::read(bin_name) {
+        Ok(bin_data) => {
+            rprintln!("Using {} as flash image", bin_name.to_string_lossy());
+            Some(bin_data)
+        },
+        Err(err) => {
+            rprintln!("WARNING: Unable to open flash image {}: {}", bin_name.to_string_lossy(), err);
+            None
+        },
+    });
+
+    let symbols = bin_data.as_ref().and_then(|bin_data| match load_bin_context(bin_data.as_slice()) {
+        Ok(symbols) => Some(symbols),
+        Err(err) => {
+            rprintln!("WARNING: Failed to parse flash image: {}", err);
+            None
+        },
+    });
 
     if args.reset {
         reset_chip(&mut dev)?;
     }
 
+
     let mut serial_state = SerialState {
         unfinished_line: String::new(),
         last_unfinished_line_at: Instant::now(),
-        bin: args.bin.take(),
-        tool_prefix: args.chip.tool_prefix(),
+        symbols,
     };
 
     let mut buf = [0u8; 1024];
@@ -152,6 +169,15 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+}
+
+fn load_bin_context(data: &[u8]) -> Result<Symbols, Box<dyn std::error::Error + 'static>> {
+    let obj = object::File::parse(data)?;
+    let context = Context::new(&obj)?;
+    Ok(Symbols {
+        obj,
+        context,
+    })
 }
 
 fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
@@ -206,21 +232,23 @@ fn handle_serial(state: &mut SerialState, buf: &[u8]) -> io::Result<()> {
 fn process_line(state: &SerialState, line: &str) -> String {
     let mut updated_line = line.to_string();
 
-    if let Some(bin) = state.bin.as_ref() {
+    if let Some(symbols) = state.symbols.as_ref() {
         for mat in FUNC_ADDR_RE.find_iter(line) {
-            let cmd = format!("{}addr2line", state.tool_prefix);
-            if let Some(output) = Command::new(&cmd)
-                .args(&[OsStr::new("-pfiaCe"), bin, OsStr::new(mat.as_str())])
-                .stdout(Stdio::piped())
-                .output()
+            let (function, file, line) = u64::from_str_radix(&mat.as_str()[2..], 16)
                 .ok()
-                .and_then(|output| String::from_utf8(output.stdout).ok())
-            {
-                if let Some(caps) = ADDR2LINE_RE.captures(&output) {
-                    let name = format!("{} [{}:{}:{}]", mat.as_str().to_string(), caps[1].to_string(), caps[2].to_string(), caps[3].to_string());
-                    updated_line = updated_line.replace(mat.as_str(), &name);
-                }
+                .map(|addr| {
+                    let function = find_function_name(symbols, addr);
+                    let (file, line) = find_location(symbols, addr);
+                    (function, file, line)
+                })
+                .unwrap_or((None, None, None));
+
+            fn or_qq(s: Option<String>) -> String {
+                s.unwrap_or_else(|| "??".to_string())
             }
+
+            let name = format!("{} [{}:{}:{}]", mat.as_str(), or_qq(function), or_qq(file), or_qq(line.map(|l| l.to_string())));
+            updated_line = updated_line.replace(mat.as_str(), &name);
         }
     }
 
@@ -238,3 +266,49 @@ fn handle_input(dev: &mut SystemPort, key_event: KeyEvent) -> io::Result<()> {
         Ok(())
     }
 }
+
+fn find_function_name(symbols: &Symbols<'_>, addr: u64) -> Option<String> {
+    symbols.context
+        .find_frames(addr)
+        .ok()
+        .and_then(|mut frames| frames.next().ok().flatten())
+        .and_then(|frame| frame.function.and_then(|function| function.name.to_string_lossy().ok().map(|name| name.into_owned())))
+        .or_else(|| symbols.obj.symbol_map().get(addr).map(|sym| sym.name().to_string()))
+}
+
+fn find_location(symbols: &Symbols<'_>, addr: u64) -> (Option<String>, Option<u32>) {
+    symbols.context
+        .find_location(addr)
+        .ok()
+        .map(|location| (
+            location.as_ref().and_then(|location| location.file).map(|file| file.to_string()),
+            location.as_ref().and_then(|location| location.line)
+        ))
+        .unwrap_or((None, None))
+}
+
+//fn find_frame(context: &Context<EndianRcSlice<RunTimeEndian>>, addr: u64) -> Result<Option<(Option<String>, Option<String>, Option<u32>)>, String> {
+//    context
+//        .find_frames(addr)
+//        .and_then(|mut frames| frames.next())
+//        .map_err(|err| err.to_string())
+//        .map(|frame| frame.map(|frame|
+//            (
+//                frame.function.and_then(|fname| fname.name.to_string_lossy().ok().map(|name| name.into_owned())),
+//                frame.location.as_ref().and_then(|location| location.file).map(|file| file.to_string()),
+//                frame.location.as_ref().and_then(|location| location.line)
+//            )
+//        ))
+//}
+//
+//fn find_symbol_and_loc<'a, O: Object<'a, 'a> + 'a>(obj: O, context: &Context<EndianRcSlice<RunTimeEndian>>, addr: u64) -> Result<Option<(Option<String>, Option<String>, Option<u32>)>, String> {
+//    let symbols = obj.symbol_map();
+//    let fname = symbols.get(addr).map(|sym| sym.name().to_string());
+//
+//    let location = context.find_location(addr)
+//        .map_err(|err| err.to_string())?;
+//    let file = location.as_ref().and_then(|location| location.file).map(|file| file.to_string());
+//    let line = location.as_ref().and_then(|location| location.line);
+//
+//    Ok(fname.map(|fname| (Some(fname), file, line)))
+//}
