@@ -135,7 +135,10 @@ fn run_child(mut args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         match dev.read(&mut buf) {
             Ok(bytes) if bytes > 0 => handle_serial(&mut serial_state, &buf[0..bytes])?,
-            Ok(_) => (),
+            Ok(_) => if dev.read_dsr().is_err() {
+                rprintln!("Device disconnected; exiting");
+                break Ok(());
+            },
             Err(err) if err.kind() == ErrorKind::TimedOut => (),
             Err(err) if err.kind() == ErrorKind::WouldBlock => (),
             Err(err) => break Err(err.into()),
