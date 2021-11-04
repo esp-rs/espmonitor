@@ -286,29 +286,3 @@ fn find_location(symbols: &Symbols<'_>, addr: u64) -> (Option<String>, Option<u3
         ))
         .unwrap_or((None, None))
 }
-
-//fn find_frame(context: &Context<EndianRcSlice<RunTimeEndian>>, addr: u64) -> Result<Option<(Option<String>, Option<String>, Option<u32>)>, String> {
-//    context
-//        .find_frames(addr)
-//        .and_then(|mut frames| frames.next())
-//        .map_err(|err| err.to_string())
-//        .map(|frame| frame.map(|frame|
-//            (
-//                frame.function.and_then(|fname| fname.name.to_string_lossy().ok().map(|name| name.into_owned())),
-//                frame.location.as_ref().and_then(|location| location.file).map(|file| file.to_string()),
-//                frame.location.as_ref().and_then(|location| location.line)
-//            )
-//        ))
-//}
-//
-//fn find_symbol_and_loc<'a, O: Object<'a, 'a> + 'a>(obj: O, context: &Context<EndianRcSlice<RunTimeEndian>>, addr: u64) -> Result<Option<(Option<String>, Option<String>, Option<u32>)>, String> {
-//    let symbols = obj.symbol_map();
-//    let fname = symbols.get(addr).map(|sym| sym.name().to_string());
-//
-//    let location = context.find_location(addr)
-//        .map_err(|err| err.to_string())?;
-//    let file = location.as_ref().and_then(|location| location.file).map(|file| file.to_string());
-//    let line = location.as_ref().and_then(|location| location.line);
-//
-//    Ok(fname.map(|fname| (Some(fname), file, line)))
-//}
