@@ -44,7 +44,7 @@ const UNFINISHED_LINE_TIMEOUT: Duration = Duration::from_secs(5);
 lazy_static! {
     static ref LINE_SEP_RE: Regex = Regex::new("\r?\n")
         .expect("Failed to parse line separator regex");
-    static ref FUNC_ADDR_RE: Regex = Regex::new(r"0x4[0-9a-f]{7}")
+    static ref FUNC_ADDR_RE: Regex = Regex::new(r"0x4[0-9a-fA-F]{7}")
         .expect("Failed to parse program address regex");
 }
 
