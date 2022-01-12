@@ -21,6 +21,10 @@ use std::convert::TryFrom;
 use std::error::Error;
 
 fn main() {
+    #[cfg(windows)]
+    let _ = crossterm::ansi_support::supports_ansi();
+    // supports_ansi() returns what it suggests, and as a side effect enables ANSI support
+
     match parse_args().and_then(|args| args.map(run).unwrap_or(Ok(()))) {
         Ok(_) => (),
         Err(err) => {
