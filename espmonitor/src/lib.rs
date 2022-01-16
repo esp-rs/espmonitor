@@ -159,6 +159,7 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
             },
             Err(err) if err.kind() == ErrorKind::TimedOut => (),
             Err(err) if err.kind() == ErrorKind::WouldBlock => (),
+            Err(err) if err.kind() == ErrorKind::Interrupted => (),
             Err(err) => break Err(err.into()),
         }
 
