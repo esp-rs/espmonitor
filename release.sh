@@ -5,7 +5,7 @@ set -e
 token="$1"
 new_version=$(awk '/^version = /{ print $3; exit; }' espmonitor/Cargo.toml | sed -e 's/"//g')
 
-[ "token" ] || {
+[ "$token" ] || {
     echo "Usage: $0 CRATES_IO_TOKEN" >&2
     exit 1
 }
