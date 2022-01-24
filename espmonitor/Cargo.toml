@@ -1,6 +1,6 @@
 [package]
 name = "espmonitor"
-version = "0.6.2"
+version = "0.6.3-alpha.1"
 description = "Monitors ESP8266 and ESP32 execution over serial"
 license = "GPL-3.0"
 authors = [
