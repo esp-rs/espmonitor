@@ -22,7 +22,7 @@ use crossterm::{
     style::{Color, Print, PrintStyledContent, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use gimli::{read::Reader, EndianRcSlice, RunTimeEndian};
+use gimli::{EndianRcSlice, RunTimeEndian};
 use lazy_static::lazy_static;
 use object::read::Object;
 use regex::Regex;
@@ -294,7 +294,7 @@ pub fn find_function_name(symbols: &Symbols<'_>, addr: u64) -> Option<String> {
         .find_frames(addr)
         .ok()
         .and_then(|mut frames| frames.next().ok().flatten())
-        .and_then(|frame| frame.function.and_then(|function| function.name.to_string_lossy().ok().map(|name| name.into_owned())))
+        .and_then(|frame| frame.function.and_then(|f| f.demangle().ok().map(|c| c.into_owned())))
         .or_else(|| symbols.obj.symbol_map().get(addr).map(|sym| sym.name().to_string()))
 }
 
