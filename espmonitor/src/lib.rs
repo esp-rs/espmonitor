@@ -22,7 +22,7 @@ use crossterm::{
     style::{Color, Print, PrintStyledContent, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use gimli::{read::Reader, EndianRcSlice, RunTimeEndian};
+use gimli::{EndianRcSlice, RunTimeEndian};
 use lazy_static::lazy_static;
 use object::read::Object;
 use regex::Regex;
@@ -54,15 +54,25 @@ macro_rules! rprintln {
     ($fmt:literal, $($arg:tt)+) => (print!(concat!($fmt, "\r\n"), $($arg)*));
 }
 
-struct Symbols<'a> {
+pub struct Symbols<'a> {
     obj: object::read::File<'a, &'a [u8]>,
     context: Context<EndianRcSlice<RunTimeEndian>>,
 }
 
-struct SerialState<'a> {
+pub struct SerialState<'a> {
     unfinished_line: String,
     last_unfinished_line_at: Instant,
     symbols: Option<Symbols<'a>>,
+}
+
+impl<'a> SerialState<'a> {
+    pub fn new(symbols: Option<Symbols<'a>>) -> Self {
+        Self {
+            unfinished_line: "".to_owned(),
+            last_unfinished_line_at: Instant::now(),
+            symbols
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -173,7 +183,7 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn load_bin_context(data: &[u8]) -> Result<Symbols, Box<dyn std::error::Error + 'static>> {
+pub fn load_bin_context(data: &[u8]) -> Result<Symbols, Box<dyn std::error::Error + 'static>> {
     let obj = object::File::parse(data)?;
     let context = Context::new(&obj)?;
     Ok(Symbols {
@@ -192,7 +202,7 @@ fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
     Ok(())
 }
 
-fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write) -> io::Result<()> {
+pub fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write) -> io::Result<()> {
     let data = String::from_utf8_lossy(buf);
     let mut lines = LINE_SEP_RE.split(&data).collect::<Vec<&str>>();
 
@@ -229,7 +239,7 @@ fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write) ->
     Ok(())
 }
 
-fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> io::Result<()> {
+pub fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> io::Result<()> {
     if let Some(symbols) = state.symbols.as_ref() {
         let mut cur_start_offset = 0;
 
@@ -279,16 +289,16 @@ fn handle_input(dev: &mut SystemPort, key_event: KeyEvent) -> io::Result<()> {
     }
 }
 
-fn find_function_name(symbols: &Symbols<'_>, addr: u64) -> Option<String> {
+pub fn find_function_name(symbols: &Symbols<'_>, addr: u64) -> Option<String> {
     symbols.context
         .find_frames(addr)
         .ok()
         .and_then(|mut frames| frames.next().ok().flatten())
-        .and_then(|frame| frame.function.and_then(|function| function.name.to_string_lossy().ok().map(|name| name.into_owned())))
+        .and_then(|frame| frame.function.and_then(|f| f.demangle().ok().map(|c| c.into_owned())))
         .or_else(|| symbols.obj.symbol_map().get(addr).map(|sym| sym.name().to_string()))
 }
 
-fn find_location(symbols: &Symbols<'_>, addr: u64) -> (Option<String>, Option<u32>) {
+pub fn find_location(symbols: &Symbols<'_>, addr: u64) -> (Option<String>, Option<u32>) {
     symbols.context
         .find_location(addr)
         .ok()
