@@ -18,4 +18,4 @@ jobs:
           profile: minimal
           override: true
       - name: Publish release
-        run: ./release.sh ${{ secrets.CRATES_IO_TOKEN }}
+        run: ./.github/release.sh ${{ secrets.CRATES_IO_TOKEN }}

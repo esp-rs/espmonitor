@@ -64,3 +64,10 @@ cargo update --package espmonitor
 git commit -a -m "Bump to $dev_version"
 
 git push --tags origin "$(git rev-parse --abbrev-ref HEAD)"
+
+echo 'Now visit:'
+echo
+echo 'https://github.com/esp-rs/espmonitor/releases/'
+echo
+echo 'Rename the draft release, point the release to the newly-created tag, and'
+echo 'publish the release.  GH Actions will take care of publishing to crates.io'
