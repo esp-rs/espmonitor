@@ -42,10 +42,13 @@ const DEFAULT_BAUD_RATE: BaudRate = BaudRate::Baud115200;
 const UNFINISHED_LINE_TIMEOUT: Duration = Duration::from_secs(5);
 
 lazy_static! {
-    static ref LINE_SEP_RE: Regex = Regex::new("\r?\n")
-        .expect("Failed to parse line separator regex");
-    static ref FUNC_ADDR_RE: Regex = Regex::new(r"0x4[0-9a-fA-F]{7}")
-        .expect("Failed to parse program address regex");
+    static ref LINE_SEP_RE: Regex =
+        Regex::new("\r?\n").expect("Failed to parse line separator regex");
+    static ref BACKTRACE_RE: Regex =
+        Regex::new(r"Backtrace:((0x4[0-9a-fA-F]{7}):(0x[0-9a-fA-F]{8})[ ]?)*")
+            .expect("Failed to parse backtrace regex");
+    static ref FRAME_RE: Regex =
+        Regex::new("(0x4[0-9a-fA-F]{7}):(0x[0-9a-fA-F]{8})").expect("Failed to parse frame regex");
 }
 
 macro_rules! rprintln {
@@ -241,31 +244,34 @@ pub fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write
 
 pub fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> io::Result<()> {
     if let Some(symbols) = state.symbols.as_ref() {
-        let mut cur_start_offset = 0;
+        if BACKTRACE_RE.is_match(line) {
+            for cap in FRAME_RE.captures_iter(line) {
+                let (function, file, lineno) = u64::from_str_radix(&cap[1][2..], 16)
+                    .ok()
+                    .map(|addr| {
+                        let function = find_function_name(symbols, addr);
+                        let (file, lineno) = find_location(symbols, addr);
+                        (function, file, lineno)
+                    })
+                    .unwrap_or((None, None, None));
 
-        for mat in FUNC_ADDR_RE.find_iter(line) {
-            let (function, file, lineno) = u64::from_str_radix(&mat.as_str()[2..], 16)
-                .ok()
-                .map(|addr| {
-                    let function = find_function_name(symbols, addr);
-                    let (file, lineno) = find_location(symbols, addr);
-                    (function, file, lineno)
-                })
-                .unwrap_or((None, None, None));
+                fn or_qq(s: Option<String>) -> String {
+                    s.unwrap_or_else(|| "??".to_string())
+                }
 
-            fn or_qq(s: Option<String>) -> String {
-                s.unwrap_or_else(|| "??".to_string())
-            }
-
-            output.queue(Print(line[cur_start_offset..mat.end()].to_string()))?;
-            cur_start_offset = mat.end();
-            let symbolicated_name = format!(" [{}:{}:{}]", or_qq(function), or_qq(file), or_qq(lineno.map(|l| l.to_string())))
+                let symbolicated_name = format!(
+                    "[{}:{}:{}:{}]",
+                    or_qq(function),
+                    or_qq(file),
+                    or_qq(lineno.map(|l| l.to_string())),
+                    &cap[1]
+                )
                 .with(Color::Yellow);
-            output.queue(PrintStyledContent(symbolicated_name))?;
-        }
-
-        if cur_start_offset < line.len() {
-            output.queue(Print(line[cur_start_offset..line.len()].to_string()))?;
+                output.queue(PrintStyledContent(symbolicated_name))?;
+                output.queue(Print(format!(":{}\r\n", &cap[2])))?;
+            }
+        } else {
+            output.queue(Print(line.to_string()))?;
         }
     } else {
         output.queue(Print(line.to_string()))?;
