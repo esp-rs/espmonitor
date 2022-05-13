@@ -240,9 +240,9 @@ pub fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write
 }
 
 pub fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> io::Result<()> {
-    if let Some(symbols) = state.symbols.as_ref() {
-        let mut cur_start_offset = 0;
+    output.queue(Print(line.to_string()))?;
 
+    if let Some(symbols) = state.symbols.as_ref() {
         for mat in FUNC_ADDR_RE.find_iter(line) {
             let (function, file, lineno) = u64::from_str_radix(&mat.as_str()[2..], 16)
                 .ok()
@@ -257,18 +257,16 @@ pub fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> i
                 s.unwrap_or_else(|| "??".to_string())
             }
 
-            output.queue(Print(line[cur_start_offset..mat.end()].to_string()))?;
-            cur_start_offset = mat.end();
-            let symbolicated_name = format!(" [{}:{}:{}]", or_qq(function), or_qq(file), or_qq(lineno.map(|l| l.to_string())))
+            let symbolicated_name = format!(
+                    "\r\n{} - {}\r\n    at {}:{}",
+                    mat.as_str(),
+                    or_qq(function),
+                    or_qq(file),
+                    or_qq(lineno.map(|l| l.to_string())),
+                )
                 .with(Color::Yellow);
             output.queue(PrintStyledContent(symbolicated_name))?;
         }
-
-        if cur_start_offset < line.len() {
-            output.queue(Print(line[cur_start_offset..line.len()].to_string()))?;
-        }
-    } else {
-        output.queue(Print(line.to_string()))?;
     }
 
     output.write_all(b"\r\n")?;
