@@ -124,8 +124,16 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut dev = serial::open(&args.serial)?;
     dev.set_timeout(Duration::from_millis(200))?;
-    dev.reconfigure(&|settings| {
-        settings.set_baud_rate(speed)
+
+    // The only thing we reconfigure and that could thus cause an error is the baud rate setting.
+    // Hence we can explicitly handle this case here and give the user a better idea of which part
+    // of their input was actually invalid.
+    dev.reconfigure(&|settings| settings.set_baud_rate(speed)).map_err(|err| {
+        if let serial::ErrorKind::InvalidInput = err.kind() {
+            format!("Baud rate {} not supported by hardware", speed.speed())
+        } else {
+            format!("{}", err)
+        }
     })?;
 
     let bin_data = args.bin.as_ref().and_then(|bin_name| match fs::read(bin_name) {
