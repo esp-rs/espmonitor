@@ -38,7 +38,6 @@ mod types;
 
 pub use types::{AppArgs, Chip, Framework};
 
-const DEFAULT_BAUD_RATE: BaudRate = BaudRate::Baud115200;
 const UNFINISHED_LINE_TIMEOUT: Duration = Duration::from_secs(5);
 
 lazy_static! {
@@ -119,7 +118,7 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     rprintln!("    CTRL+C    Exit");
     rprintln!();
 
-    let speed = args.speed.map(BaudRate::from_speed).unwrap_or(DEFAULT_BAUD_RATE);
+    let speed = BaudRate::from_speed(args.speed);
     rprintln!("Opening {} with speed {}", args.serial, speed.speed());
 
     let mut dev = serial::open(&args.serial)?;
