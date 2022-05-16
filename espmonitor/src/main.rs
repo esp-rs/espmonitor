@@ -15,57 +15,23 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
-use espmonitor::{AppArgs, Chip, Framework, run};
-use pico_args::Arguments;
-use std::convert::TryFrom;
-use std::error::Error;
+use clap::Parser;
+use espmonitor::{AppArgs, run};
 
 fn main() {
     #[cfg(windows)]
     let _ = crossterm::ansi_support::supports_ansi();
     // supports_ansi() returns what it suggests, and as a side effect enables ANSI support
 
-    match parse_args().and_then(|args| args.map(run).unwrap_or(Ok(()))) {
+    let mut args = AppArgs::parse();
+    // TODO: This feels wrong...
+    args.reset = !args.no_reset;
+    match run(args) {
         Ok(_) => (),
         Err(err) => {
-            println!("Error: {}", err);
-            println!();
-            if err.downcast::<pico_args::Error>().is_ok() {
-                print_usage();
-            }
+            eprintln!("Error: {}", err);
             std::process::exit(1);
         },
-    }
+    };
 }
 
-fn parse_args() -> Result<Option<AppArgs>, Box<dyn Error>> {
-    let mut args = Arguments::from_env();
-    if args.contains("-h") || args.contains("--help") {
-        print_usage();
-        Ok(None)
-    } else {
-        #[allow(clippy::redundant_closure)]
-        let chip = args.opt_value_from_fn("--chip", |s| Chip::try_from(s))?.unwrap_or_default();
-        Ok(Some(AppArgs {
-            chip,
-            framework: Framework::default(),
-            speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
-            reset: args.contains("--reset") || !args.contains("--no-reset"),
-            bin: args.opt_value_from_str("--bin")?,
-            serial: args.free_from_str()?,
-        }))
-    }
-}
-
-fn print_usage() {
-    let usage = "Usage: espmonitor [OPTIONS] SERIAL_DEVICE\n\
-        \n\
-        \x20   --chip {esp32|esp32c3|esp8266}   Which ESP chip to target\n\
-        \x20   --reset                          Reset the chip on start (default)\n\
-        \x20   --no-reset                       Do not reset thechip on start\n\
-        \x20   --speed BAUD                     Baud rate of serial device (default: 115200)\n\
-        \x20   --bin BINARY                     Path to executable matching what is on the device\n\
-        \x20   SERIAL_DEVICE                    Path to the serial device";
-
-    println!("{}", usage);
-}
