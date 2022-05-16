@@ -95,6 +95,9 @@ fn parse_args(args: Vec<OsString>) -> Result<Option<CargoAppArgs>, Box<dyn Error
     if args.contains("-h") || args.contains("--help") {
         print_usage();
         Ok(None)
+    } else if args.contains("-V") || args.contains("--version") {
+        print_version();
+        Ok(None)
     } else {
         let (chip, framework) = match args.opt_value_from_str::<&str, String>("--target")? {
             Some(ref target) => (
@@ -157,7 +160,12 @@ fn print_usage() {
         \x20   --reset                         Reset the chip on start (default)\n\
         \x20   --no-reset                      Do not reset thechip on start\n\
         \x20   --speed BAUD                    Baud rate of serial device (default: 115200)\n\
+        \x20   --version                       Output version information and exit\n\
         \x20   SERIAL_DEVICE                   Path to the serial device";
 
     println!("{}", usage);
+}
+
+fn print_version() {
+    println!("espmonitor {}", env!("CARGO_PKG_VERSION"));
 }
