@@ -125,75 +125,32 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn parse_args(args: Vec<OsString>) -> Result<Option<CargoAppArgs>, Box<dyn Error>> {
-    let mut args = Arguments::from_vec(args);
+fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
+    let (chip, framework) = match args.target {
+        Some(ref target) => (
+            Chip::from_target(target)?,
+            Framework::from_target(target)?,
+        ),
+        None => (
+            #[allow(clippy::redundant_closure)]
+            args.app_args.chip,
+            #[allow(clippy::redundant_closure)]
+            args.framework,
+        )
+    };
 
-    if args.contains("-h") || args.contains("--help") {
-        print_usage();
-        Ok(None)
-    } else {
-        let (chip, framework) = match args.opt_value_from_str::<&str, String>("--target")? {
-            Some(ref target) => (
-                Chip::from_target(target)?,
-                Framework::from_target(target)?,
-            ),
-            None => (
-                #[allow(clippy::redundant_closure)]
-                args.opt_value_from_fn("--chip", |s| Chip::try_from(s))?.unwrap_or_default(),
-                #[allow(clippy::redundant_closure)]
-                args.opt_value_from_fn("--framework", |s| Framework::try_from(s))?.unwrap_or_default(),
-            )
-        };
+    let project = Project::query(".").unwrap();
+    let artifact = match args.example.as_ref() {
+        Some(example) => Artifact::Example(example.as_str()),
+        None => Artifact::Bin(project.name()),
+    };
+    let profile = if args.release { Profile::Release } else { Profile::Dev };
 
-        let release = args.contains("--release");
-        let example: Option<String> = args.opt_value_from_str("--example")?;
+    let host = "x86_64-unknown-linux-gnu";  // FIXME: does this even matter?
+    let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
 
-        let project = Project::query(".").unwrap();
-        let artifact = match example.as_ref() {
-            Some(example) => Artifact::Example(example.as_str()),
-            None => Artifact::Bin(project.name()),
-        };
-        let profile = if release { Profile::Release } else { Profile::Dev };
+    args.app_args.bin = Some(bin.as_os_str().to_os_string());
 
-        let host = "x86_64-unknown-linux-gnu";  // FIXME: does this even matter?
-        let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
-
-        Ok(Some(
-            CargoAppArgs {
-                flash: args.contains("--flash"),
-                flash_speed: args.opt_value_from_fn("--flash-speed", |s| s.parse::<u32>())?.unwrap_or(DEFAULT_FLASH_BAUD_RATE),
-                release: args.contains("--release"),
-                example: args.opt_value_from_str("--example")?,
-                features: args.opt_value_from_str("--features")?,
-                app_args: AppArgs {
-                    chip,
-                    framework,
-                    reset: args.contains("--reset") || !args.contains("--no-reset"),
-                    speed: args.opt_value_from_fn("--speed", |s| s.parse::<usize>())?,
-                    bin: Some(bin.as_os_str().to_os_string()),
-                    serial: args.free_from_str()?,
-                }
-            }
-        ))
-    }
+    Ok (())
 }
 
-fn print_usage() {
-    let usage = "Usage: cargo espmonitor [OPTIONS] SERIAL_DEVICE\n\
-        \n\
-        \x20   --flash                         Flashes image to device (building first if necessary; requires 'cargo-espflash')\n\
-        \x20   --flash-speed                   Baud rate when flashing (default 460800)\n\
-        \x20   --example EXAMPLE               If flashing, flash this example app\n\
-        \x20   --features FEATURES             If flashing, build with these features first\n\
-        \x20   --target TARGET                 Infer chip and framework from target triple\n\
-        \x20   --chip {esp32|esp32c3|esp8266}  Which ESP chip to target\n\
-        \x20   --framework {baremetal,esp-idf} Which framework to target\n\
-        \x20   --release                       Use the release build\n\
-        \x20   --example EXAMPLE               Use the named example app binary\n\
-        \x20   --reset                         Reset the chip on start (default)\n\
-        \x20   --no-reset                      Do not reset thechip on start\n\
-        \x20   --speed BAUD                    Baud rate of serial device (default: 115200)\n\
-        \x20   SERIAL_DEVICE                   Path to the serial device";
-
-    println!("{}", usage);
-}
