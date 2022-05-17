@@ -130,10 +130,6 @@ pub struct AppArgs {
     #[clap(short, long, arg_enum, default_value_t = Chip::ESP32)]
     pub chip: Chip,
 
-    /// ???
-    #[clap(arg_enum, skip)]
-    pub framework: Framework,
-
     /// Reset the chip on start
     #[clap(short, long)]
     pub reset: bool,
