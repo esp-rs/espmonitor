@@ -26,15 +26,51 @@ use std::{
     io,
     process::Command,
 };
+use clap::{ArgGroup, Parser};
 
 const DEFAULT_FLASH_BAUD_RATE: u32 = 460_800;
 
+#[derive(Parser)]
+#[clap(author, version, about)]
+// None of the arguments related to flashing can appear without "--flash", but they aren't required
+// (e.g. if "--flash" isn't specified) and multiple of them can appear
+#[clap(group(
+        ArgGroup::new("will_flash")
+            .required(false)
+            .multiple(true)
+            .args(&["framework", "release", "example", "features"])
+            .requires("flash")))]
 struct CargoAppArgs {
+
+    /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
+    #[clap(long)]
     flash: bool,
+
+    /// Baud rate when flashing
+    #[clap(long, default_value_t = 460800, name = "FLASH_BAUD", requires("flash"))]
     flash_speed: u32,
+
+    /// Which framework to target
+    #[clap(long, arg_enum, default_value_t = Framework::Baremetal, requires("chip"))]
+    framework: Framework,
+
+    /// Use the release build
+    #[clap(long)]
     release: bool,
+
+    /// If flashing, flash this example app
+    #[clap(long)]
     example: Option<String>,
+
+    /// If flashing, build with these features first
+    #[clap(long)]
     features: Option<String>,
+
+    /// Infer chip and framework from target triple
+    #[clap(long, name = "TARGET_TRIPLE", conflicts_with("chip"))]
+    target: Option<String>,
+
+    #[clap(flatten)]
     app_args: AppArgs,
 }
 
