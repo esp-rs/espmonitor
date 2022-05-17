@@ -17,18 +17,12 @@
 
 use cargo_project::{Artifact, Profile, Project};
 use espmonitor::{AppArgs, Chip, Framework, run};
-use pico_args::Arguments;
 use std::{
-    convert::TryFrom,
-    env,
     error::Error,
-    ffi::OsString,
     io,
     process::Command,
 };
 use clap::{ArgGroup, Parser};
-
-const DEFAULT_FLASH_BAUD_RATE: u32 = 460_800;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -75,24 +69,24 @@ struct CargoAppArgs {
 }
 
 fn main() {
-    // Skip first two args ('cargo', 'espmonitor')
-    let args = env::args().skip(2).map(OsString::from).collect();
+    let mut args = CargoAppArgs::parse();
 
-    if let Err(err) = parse_args(args).and_then(|cargo_app_args|
-        cargo_app_args
-            .map(|mut cargo_app_args| {
-                if cargo_app_args.flash {
-                    run_flash(&mut cargo_app_args)?;
-                }
-                run(cargo_app_args.app_args)
-            })
-            .unwrap_or(Ok(()))
-    ) {
+    if let Err(err) = handle_args(&mut args) {
         eprintln!("Error: {}", err);
         eprintln!();
-        if err.downcast::<pico_args::Error>().is_ok() {
-            print_usage();
-        }
+        std::process::exit(1);
+    };
+
+    if args.flash {
+        if let Err(err) = run_flash(&mut args) {
+            eprintln!("Error: {}", err);
+            eprintln!();
+            std::process::exit(1);
+        };
+    }
+    if let Err(err) = run(args.app_args) {
+        eprintln!("Error: {}", err);
+        eprintln!();
         std::process::exit(1);
     }
 }
