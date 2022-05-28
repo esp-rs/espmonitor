@@ -29,11 +29,11 @@ path = "src/main.rs"
 
 [dependencies]
 addr2line = "0.17"
+clap = { version = "3.1", features = ["derive"] }
 crossterm = "0.23"
 gimli = "0.26"
 lazy_static = "1"
 object = "0.27"
-pico-args = "0.4"
 regex = "1"
 serial = "0.4"
 
