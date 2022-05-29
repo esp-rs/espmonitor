@@ -25,6 +25,13 @@ use std::{
 use clap::{ArgGroup, Parser};
 
 #[derive(Parser)]
+#[clap(name = "cargo")]
+#[clap(bin_name = "cargo")]
+enum Cargo {
+    Espmonitor(CargoAppArgs)
+}
+
+#[derive(clap::Args)]
 #[clap(author, version, about)]
 // None of the arguments related to flashing can appear without "--flash", but they aren't required
 // (e.g. if "--flash" isn't specified) and multiple of them can appear
@@ -69,7 +76,7 @@ struct CargoAppArgs {
 }
 
 fn main() {
-    let mut args = CargoAppArgs::parse();
+    let Cargo::Espmonitor(mut args) = Cargo::parse();
 
     if let Err(err) = handle_args(&mut args) {
         eprintln!("Error: {}", err);
