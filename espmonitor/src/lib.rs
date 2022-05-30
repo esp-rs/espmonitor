@@ -17,10 +17,10 @@
 
 use addr2line::Context;
 use crossterm::{
-    QueueableCommand,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     style::{Color, Print, PrintStyledContent, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode},
+    QueueableCommand,
 };
 use gimli::{EndianRcSlice, RunTimeEndian};
 use lazy_static::lazy_static;
@@ -29,7 +29,7 @@ use regex::Regex;
 use serial::{self, BaudRate, SerialPort, SystemPort};
 use std::{
     fs,
-    io::{self, ErrorKind, Read, Write, stdout},
+    io::{self, stdout, ErrorKind, Read, Write},
     process::exit,
     time::{Duration, Instant},
 };
@@ -41,10 +41,10 @@ pub use types::{AppArgs, Chip, Framework};
 const UNFINISHED_LINE_TIMEOUT: Duration = Duration::from_secs(5);
 
 lazy_static! {
-    static ref LINE_SEP_RE: Regex = Regex::new("\r?\n")
-        .expect("Failed to parse line separator regex");
-    static ref FUNC_ADDR_RE: Regex = Regex::new(r"0x4[0-9a-fA-F]{7}")
-        .expect("Failed to parse program address regex");
+    static ref LINE_SEP_RE: Regex =
+        Regex::new("\r?\n").expect("Failed to parse line separator regex");
+    static ref FUNC_ADDR_RE: Regex =
+        Regex::new(r"0x4[0-9a-fA-F]{7}").expect("Failed to parse program address regex");
 }
 
 macro_rules! rprintln {
@@ -69,14 +69,17 @@ impl<'a> SerialState<'a> {
         Self {
             unfinished_line: "".to_owned(),
             last_unfinished_line_at: Instant::now(),
-            symbols
+            symbols,
         }
     }
 }
 
 #[cfg(unix)]
 pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
-    use nix::{sys::wait::{WaitStatus, waitpid}, unistd::{ForkResult, fork}};
+    use nix::{
+        sys::wait::{waitpid, WaitStatus},
+        unistd::{fork, ForkResult},
+    };
 
     enable_raw_mode()?;
 
@@ -84,17 +87,17 @@ pub fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => {
             disable_raw_mode()?;
             Err(err.into())
-        },
+        }
         Ok(ForkResult::Parent { child }) => loop {
             match waitpid(child, None) {
                 Ok(WaitStatus::Exited(_, status)) => {
                     disable_raw_mode()?;
                     exit(status);
-                },
+                }
                 Ok(WaitStatus::Signaled(_, _, _)) => {
                     disable_raw_mode()?;
                     exit(255);
-                },
+                }
                 _ => (),
             }
         },
@@ -127,37 +130,47 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     // The only thing we reconfigure and that could thus cause an error is the baud rate setting.
     // Hence we can explicitly handle this case here and give the user a better idea of which part
     // of their input was actually invalid.
-    dev.reconfigure(&|settings| settings.set_baud_rate(speed)).map_err(|err| {
-        if let serial::ErrorKind::InvalidInput = err.kind() {
-            format!("Baud rate {} not supported by hardware", speed.speed())
-        } else {
-            format!("{}", err)
-        }
-    })?;
+    dev.reconfigure(&|settings| settings.set_baud_rate(speed))
+        .map_err(|err| {
+            if let serial::ErrorKind::InvalidInput = err.kind() {
+                format!("Baud rate {} not supported by hardware", speed.speed())
+            } else {
+                format!("{}", err)
+            }
+        })?;
 
-    let bin_data = args.bin.as_ref().and_then(|bin_name| match fs::read(bin_name) {
-        Ok(bin_data) => {
-            rprintln!("Using {} as flash image", bin_name.to_string_lossy());
-            Some(bin_data)
-        },
-        Err(err) => {
-            rprintln!("WARNING: Unable to open flash image {}: {}", bin_name.to_string_lossy(), err);
-            None
-        },
-    });
+    let bin_data = args
+        .bin
+        .as_ref()
+        .and_then(|bin_name| match fs::read(bin_name) {
+            Ok(bin_data) => {
+                rprintln!("Using {} as flash image", bin_name.to_string_lossy());
+                Some(bin_data)
+            }
+            Err(err) => {
+                rprintln!(
+                    "WARNING: Unable to open flash image {}: {}",
+                    bin_name.to_string_lossy(),
+                    err
+                );
+                None
+            }
+        });
 
-    let symbols = bin_data.as_ref().and_then(|bin_data| match load_bin_context(bin_data.as_slice()) {
-        Ok(symbols) => Some(symbols),
-        Err(err) => {
-            rprintln!("WARNING: Failed to parse flash image: {}", err);
-            None
-        },
-    });
+    let symbols =
+        bin_data
+            .as_ref()
+            .and_then(|bin_data| match load_bin_context(bin_data.as_slice()) {
+                Ok(symbols) => Some(symbols),
+                Err(err) => {
+                    rprintln!("WARNING: Failed to parse flash image: {}", err);
+                    None
+                }
+            });
 
     if args.reset {
         reset_chip(&mut dev)?;
     }
-
 
     let mut serial_state = SerialState {
         unfinished_line: String::new(),
@@ -169,11 +182,15 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = [0u8; 1024];
     loop {
         match dev.read(&mut buf) {
-            Ok(bytes) if bytes > 0 => handle_serial(&mut serial_state, &buf[0..bytes], &mut output)?,
-            Ok(_) => if dev.read_dsr().is_err() {
-                rprintln!("Device disconnected; exiting");
-                break Ok(());
-            },
+            Ok(bytes) if bytes > 0 => {
+                handle_serial(&mut serial_state, &buf[0..bytes], &mut output)?
+            }
+            Ok(_) => {
+                if dev.read_dsr().is_err() {
+                    rprintln!("Device disconnected; exiting");
+                    break Ok(());
+                }
+            }
             Err(err) if err.kind() == ErrorKind::TimedOut => (),
             Err(err) if err.kind() == ErrorKind::WouldBlock => (),
             Err(err) if err.kind() == ErrorKind::Interrupted => (),
@@ -193,10 +210,7 @@ fn run_child(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
 pub fn load_bin_context(data: &[u8]) -> Result<Symbols, Box<dyn std::error::Error + 'static>> {
     let obj = object::File::parse(data)?;
     let context = Context::new(&obj)?;
-    Ok(Symbols {
-        obj,
-        context,
-    })
+    Ok(Symbols { obj, context })
 }
 
 fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
@@ -209,25 +223,27 @@ fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
     Ok(())
 }
 
-pub fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write) -> io::Result<()> {
+pub fn handle_serial(
+    state: &mut SerialState,
+    buf: &[u8],
+    output: &mut dyn Write,
+) -> io::Result<()> {
     let data = String::from_utf8_lossy(buf);
     let mut lines = LINE_SEP_RE.split(&data).collect::<Vec<&str>>();
 
-    let new_unfinished_line =
-        if data.ends_with('\n') {
-            None
-        } else {
-            lines.pop()
-        };
+    let new_unfinished_line = if data.ends_with('\n') {
+        None
+    } else {
+        lines.pop()
+    };
 
     for line in lines {
-        let full_line =
-            if !state.unfinished_line.is_empty() {
-                state.unfinished_line.push_str(line);
-                state.unfinished_line.as_str()
-            } else {
-                line
-            };
+        let full_line = if !state.unfinished_line.is_empty() {
+            state.unfinished_line.push_str(line);
+            state.unfinished_line.as_str()
+        } else {
+            line
+        };
 
         if !full_line.is_empty() {
             output_line(state, full_line, output)?;
@@ -238,7 +254,9 @@ pub fn handle_serial(state: &mut SerialState, buf: &[u8], output: &mut dyn Write
     if let Some(nel) = new_unfinished_line {
         state.unfinished_line.push_str(nel);
         state.last_unfinished_line_at = Instant::now();
-    } else if !state.unfinished_line.is_empty() && state.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT {
+    } else if !state.unfinished_line.is_empty()
+        && state.last_unfinished_line_at.elapsed() > UNFINISHED_LINE_TIMEOUT
+    {
         output_line(state, &state.unfinished_line, output)?;
         state.unfinished_line.clear();
     }
@@ -265,13 +283,13 @@ pub fn output_line(state: &SerialState, line: &str, output: &mut dyn Write) -> i
             }
 
             let symbolicated_name = format!(
-                    "\r\n{} - {}\r\n    at {}:{}",
-                    mat.as_str(),
-                    or_qq(function),
-                    or_qq(file),
-                    or_qq(lineno.map(|l| l.to_string())),
-                )
-                .with(Color::Yellow);
+                "\r\n{} - {}\r\n    at {}:{}",
+                mat.as_str(),
+                or_qq(function),
+                or_qq(file),
+                or_qq(lineno.map(|l| l.to_string())),
+            )
+            .with(Color::Yellow);
             output.queue(PrintStyledContent(symbolicated_name))?;
         }
     }
@@ -295,21 +313,38 @@ fn handle_input(dev: &mut SystemPort, key_event: KeyEvent) -> io::Result<()> {
 }
 
 pub fn find_function_name(symbols: &Symbols<'_>, addr: u64) -> Option<String> {
-    symbols.context
+    symbols
+        .context
         .find_frames(addr)
         .ok()
         .and_then(|mut frames| frames.next().ok().flatten())
-        .and_then(|frame| frame.function.and_then(|f| f.demangle().ok().map(|c| c.into_owned())))
-        .or_else(|| symbols.obj.symbol_map().get(addr).map(|sym| sym.name().to_string()))
+        .and_then(|frame| {
+            frame
+                .function
+                .and_then(|f| f.demangle().ok().map(|c| c.into_owned()))
+        })
+        .or_else(|| {
+            symbols
+                .obj
+                .symbol_map()
+                .get(addr)
+                .map(|sym| sym.name().to_string())
+        })
 }
 
 pub fn find_location(symbols: &Symbols<'_>, addr: u64) -> (Option<String>, Option<u32>) {
-    symbols.context
+    symbols
+        .context
         .find_location(addr)
         .ok()
-        .map(|location| (
-            location.as_ref().and_then(|location| location.file).map(|file| file.to_string()),
-            location.as_ref().and_then(|location| location.line)
-        ))
+        .map(|location| {
+            (
+                location
+                    .as_ref()
+                    .and_then(|location| location.file)
+                    .map(|file| file.to_string()),
+                location.as_ref().and_then(|location| location.line),
+            )
+        })
         .unwrap_or((None, None))
 }

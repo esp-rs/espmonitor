@@ -5,8 +5,8 @@ on:
   pull_request: {}
 name: CI
 jobs:
-  clippy:
-    name: clippy
+  janitorial:
+    name: janitorial
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -21,6 +21,10 @@ jobs:
           toolchain: stable
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets --all-features -- -D warnings
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --check
   test:
     name: test
     runs-on: ${{ matrix.os }}
