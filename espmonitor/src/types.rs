@@ -36,7 +36,10 @@ impl Framework {
         } else if target.ends_with("-none-elf") {
             Ok(Framework::Baremetal)
         } else {
-            Err(IoError::new(ErrorKind::InvalidInput, format!("Can't figure out framework from target '{}'", target)))
+            Err(IoError::new(
+                ErrorKind::InvalidInput,
+                format!("Can't figure out framework from target '{}'", target),
+            ))
         }
     }
 }
@@ -47,7 +50,10 @@ impl TryFrom<&str> for Framework {
         match value {
             "baremetal" => Ok(Framework::Baremetal),
             "esp-idf" | "espidf" => Ok(Framework::EspIdf),
-            _ => Err(IoError::new(ErrorKind::InvalidInput, format!("'{}' is not a valid framework", value))),
+            _ => Err(IoError::new(
+                ErrorKind::InvalidInput,
+                format!("'{}' is not a valid framework", value),
+            )),
         }
     }
 }
@@ -76,7 +82,13 @@ impl Chip {
         } else if target.contains("-esp8266-") {
             Ok(Chip::ESP8266)
         } else {
-            Err(IoError::new(ErrorKind::InvalidInput, format!("Can't figure out chip from target '{}'; try specifying the --chip option", target)))
+            Err(IoError::new(
+                ErrorKind::InvalidInput,
+                format!(
+                    "Can't figure out chip from target '{}'; try specifying the --chip option",
+                    target
+                ),
+            ))
         }
     }
 }
@@ -94,12 +106,12 @@ impl Chip {
             Chip::ESP8266 => "esp8266-",
             Chip::ESP32C3 => match framework {
                 Framework::Baremetal => "unknown-",
-                Framework::EspIdf => "esp-"
-            }
+                Framework::EspIdf => "esp-",
+            },
         });
         target.push_str(match framework {
             Framework::Baremetal => "none-elf",
-            Framework::EspIdf=> "espidf",
+            Framework::EspIdf => "espidf",
         });
         target
     }
@@ -112,7 +124,10 @@ impl TryFrom<&str> for Chip {
             "esp32" => Ok(Chip::ESP32),
             "esp32c3" => Ok(Chip::ESP32C3),
             "esp8266" => Ok(Chip::ESP8266),
-            _ => Err(IoError::new(ErrorKind::InvalidInput, format!("'{}' is not a valid chip", value))),
+            _ => Err(IoError::new(
+                ErrorKind::InvalidInput,
+                format!("'{}' is not a valid chip", value),
+            )),
         }
     }
 }

@@ -16,7 +16,7 @@
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
 use clap::Parser;
-use espmonitor::{AppArgs, run};
+use espmonitor::{run, AppArgs};
 
 fn main() {
     #[cfg(windows)]
@@ -31,7 +31,6 @@ fn main() {
         Err(err) => {
             eprintln!("Error: {}", err);
             std::process::exit(1);
-        },
+        }
     };
 }
-

@@ -16,19 +16,15 @@
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
 use cargo_project::{Artifact, Profile, Project};
-use espmonitor::{AppArgs, Chip, Framework, run};
-use std::{
-    error::Error,
-    io,
-    process::Command,
-};
 use clap::{ArgGroup, Parser};
+use espmonitor::{run, AppArgs, Chip, Framework};
+use std::{error::Error, io, process::Command};
 
 #[derive(Parser)]
 #[clap(name = "cargo")]
 #[clap(bin_name = "cargo")]
 enum Cargo {
-    Espmonitor(CargoAppArgs)
+    Espmonitor(CargoAppArgs),
 }
 
 #[derive(clap::Args)]
@@ -42,7 +38,6 @@ enum Cargo {
             .args(&["framework", "release", "example", "features"])
             .requires("flash")))]
 struct CargoAppArgs {
-
     /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
     #[clap(long)]
     flash: bool,
@@ -115,10 +110,7 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     args.push(cargo_app_args.flash_speed.to_string());
     args.push(cargo_app_args.app_args.serial.clone());
 
-    let status = Command::new("cargo")
-        .args(&args[..])
-        .spawn()?
-        .wait()?;
+    let status = Command::new("cargo").args(&args[..]).spawn()?.wait()?;
     if status.success() {
         Ok(())
     } else {
@@ -128,16 +120,13 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
 
 fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     let (chip, framework) = match args.target {
-        Some(ref target) => (
-            Chip::from_target(target)?,
-            Framework::from_target(target)?,
-        ),
+        Some(ref target) => (Chip::from_target(target)?, Framework::from_target(target)?),
         None => (
             #[allow(clippy::redundant_closure)]
             args.app_args.chip,
             #[allow(clippy::redundant_closure)]
             args.framework,
-        )
+        ),
     };
 
     let project = Project::query(".").unwrap();
@@ -145,13 +134,16 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
         Some(example) => Artifact::Example(example.as_str()),
         None => Artifact::Bin(project.name()),
     };
-    let profile = if args.release { Profile::Release } else { Profile::Dev };
+    let profile = if args.release {
+        Profile::Release
+    } else {
+        Profile::Dev
+    };
 
-    let host = "x86_64-unknown-linux-gnu";  // FIXME: does this even matter?
+    let host = "x86_64-unknown-linux-gnu"; // FIXME: does this even matter?
     let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
 
     args.app_args.bin = Some(bin.as_os_str().to_os_string());
 
-    Ok (())
+    Ok(())
 }
-
