@@ -51,7 +51,7 @@ struct CargoAppArgs {
     chip: Chip,
 
     /// Which framework to target
-    #[clap(long, arg_enum, default_value_t = Framework::Baremetal)]
+    #[clap(long, arg_enum, default_value_t = Framework::EspIdf)]
     framework: Framework,
 
     /// Use the release build
