@@ -145,5 +145,7 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
 
     args.app_args.bin = Some(bin.as_os_str().to_os_string());
 
+    args.app_args.reset = !args.app_args.no_reset;
+
     Ok(())
 }
