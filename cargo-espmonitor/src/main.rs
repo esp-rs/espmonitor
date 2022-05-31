@@ -35,7 +35,7 @@ enum Cargo {
         ArgGroup::new("will_flash")
             .required(false)
             .multiple(true)
-            .args(&["framework", "release", "example", "features"])
+            .args(&["release", "example", "features"])
             .requires("flash")))]
 struct CargoAppArgs {
     /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
