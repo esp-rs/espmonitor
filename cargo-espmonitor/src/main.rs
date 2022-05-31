@@ -46,6 +46,10 @@ struct CargoAppArgs {
     #[clap(long, default_value_t = 460800, name = "FLASH_BAUD", requires("flash"))]
     flash_speed: u32,
 
+    /// Which ESP chip to target
+    #[clap(short, long, arg_enum, default_value_t = Chip::ESP32)]
+    chip: Chip,
+
     /// Which framework to target
     #[clap(long, arg_enum, default_value_t = Framework::Baremetal, requires("chip"))]
     framework: Framework,
@@ -123,7 +127,7 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
         Some(ref target) => (Chip::from_target(target)?, Framework::from_target(target)?),
         None => (
             #[allow(clippy::redundant_closure)]
-            args.app_args.chip,
+            args.chip,
             #[allow(clippy::redundant_closure)]
             args.framework,
         ),
