@@ -35,7 +35,7 @@ enum Cargo {
         ArgGroup::new("will_flash")
             .required(false)
             .multiple(true)
-            .args(&["release", "example", "features"])
+            .args(&["FLASH_BAUD", "release", "example", "features"])
             .requires("flash")))]
 struct CargoAppArgs {
     /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
@@ -43,7 +43,7 @@ struct CargoAppArgs {
     flash: bool,
 
     /// Baud rate when flashing
-    #[clap(long, default_value_t = 460800, name = "FLASH_BAUD", requires("flash"))]
+    #[clap(long, default_value_t = 460800, name = "FLASH_BAUD")]
     flash_speed: u32,
 
     /// Which ESP chip to target
