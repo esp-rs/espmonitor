@@ -67,7 +67,12 @@ struct CargoAppArgs {
     features: Option<String>,
 
     /// Infer chip and framework from target triple
-    #[clap(long, name = "TARGET_TRIPLE", conflicts_with("chip"))]
+    #[clap(
+        long,
+        name = "TARGET_TRIPLE",
+        conflicts_with("chip"),
+        conflicts_with("framework")
+    )]
     target: Option<String>,
 
     #[clap(flatten)]
