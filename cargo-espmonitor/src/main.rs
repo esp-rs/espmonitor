@@ -35,7 +35,7 @@ enum Cargo {
         ArgGroup::new("will_flash")
             .required(false)
             .multiple(true)
-            .args(&["framework", "release", "example", "features"])
+            .args(&["FLASH_BAUD", "release", "example", "features"])
             .requires("flash")))]
 struct CargoAppArgs {
     /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
@@ -43,11 +43,15 @@ struct CargoAppArgs {
     flash: bool,
 
     /// Baud rate when flashing
-    #[clap(long, default_value_t = 460800, name = "FLASH_BAUD", requires("flash"))]
+    #[clap(long, default_value_t = 460800, name = "FLASH_BAUD")]
     flash_speed: u32,
 
+    /// Which ESP chip to target
+    #[clap(short, long, arg_enum, default_value_t = Chip::ESP32)]
+    chip: Chip,
+
     /// Which framework to target
-    #[clap(long, arg_enum, default_value_t = Framework::Baremetal, requires("chip"))]
+    #[clap(long, arg_enum, default_value_t = Framework::EspIdf)]
     framework: Framework,
 
     /// Use the release build
@@ -63,7 +67,12 @@ struct CargoAppArgs {
     features: Option<String>,
 
     /// Infer chip and framework from target triple
-    #[clap(long, name = "TARGET_TRIPLE", conflicts_with("chip"))]
+    #[clap(
+        long,
+        name = "TARGET_TRIPLE",
+        conflicts_with("chip"),
+        conflicts_with("framework")
+    )]
     target: Option<String>,
 
     #[clap(flatten)]
@@ -123,7 +132,7 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
         Some(ref target) => (Chip::from_target(target)?, Framework::from_target(target)?),
         None => (
             #[allow(clippy::redundant_closure)]
-            args.app_args.chip,
+            args.chip,
             #[allow(clippy::redundant_closure)]
             args.framework,
         ),
@@ -144,6 +153,8 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
 
     args.app_args.bin = Some(bin.as_os_str().to_os_string());
+
+    args.app_args.reset = !args.app_args.no_reset;
 
     Ok(())
 }

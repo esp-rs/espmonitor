@@ -141,11 +141,7 @@ impl Default for Chip {
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
 pub struct AppArgs {
-    /// Which ESP chip to target
-    #[clap(short, long, arg_enum, default_value_t = Chip::ESP32)]
-    pub chip: Chip,
-
-    /// Reset the chip on start
+    /// Reset the chip on start [default]
     #[clap(short, long)]
     pub reset: bool,
 
