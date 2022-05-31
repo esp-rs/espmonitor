@@ -141,7 +141,7 @@ impl Default for Chip {
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
 pub struct AppArgs {
-    /// Reset the chip on start
+    /// Reset the chip on start [default]
     #[clap(short, long)]
     pub reset: bool,
 
