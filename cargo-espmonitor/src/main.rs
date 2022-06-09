@@ -38,6 +38,18 @@ enum Cargo {
             .args(&["FLASH_BAUD", "release", "example", "features"])
             .requires("flash")))]
 struct CargoAppArgs {
+    /// Reset the chip on start [default]
+    #[clap(short, long)]
+    reset: bool,
+
+    /// Do not reset the chip on start
+    #[clap(long, conflicts_with("reset"))]
+    no_reset: bool,
+
+    /// Baud rate of serial device
+    #[clap(long, short, default_value = "115200", name = "BAUD")]
+    speed: usize,
+
     /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
     #[clap(long)]
     flash: bool,
@@ -75,17 +87,21 @@ struct CargoAppArgs {
     )]
     target: Option<String>,
 
-    #[clap(flatten)]
-    app_args: AppArgs,
+    /// Path to the serial device
+    #[clap(name = "SERIAL_DEVICE")]
+    serial: String,
 }
 
 fn main() {
     let Cargo::Espmonitor(mut args) = Cargo::parse();
 
-    if let Err(err) = handle_args(&mut args) {
-        eprintln!("Error: {}", err);
-        eprintln!();
-        std::process::exit(1);
+    let app_args = match handle_args(&mut args) {
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            eprintln!();
+            std::process::exit(1);
+        }
+        Ok(app_args) => app_args,
     };
 
     if args.flash {
@@ -95,7 +111,8 @@ fn main() {
             std::process::exit(1);
         };
     }
-    if let Err(err) = run(args.app_args) {
+
+    if let Err(err) = run(app_args) {
         eprintln!("Error: {}", err);
         eprintln!();
         std::process::exit(1);
@@ -117,7 +134,7 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     }
     args.push("--speed".to_string());
     args.push(cargo_app_args.flash_speed.to_string());
-    args.push(cargo_app_args.app_args.serial.clone());
+    args.push(cargo_app_args.serial.clone());
 
     let status = Command::new("cargo").args(&args[..]).spawn()?.wait()?;
     if status.success() {
@@ -127,7 +144,7 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
+fn handle_args(args: &mut CargoAppArgs) -> Result<AppArgs, Box<dyn Error>> {
     let (chip, framework) = match args.target {
         Some(ref target) => (Chip::from_target(target)?, Framework::from_target(target)?),
         None => (
@@ -152,9 +169,13 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     let host = "x86_64-unknown-linux-gnu"; // FIXME: does this even matter?
     let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
 
-    args.app_args.bin = Some(bin.as_os_str().to_os_string());
+    args.reset = !args.no_reset;
 
-    args.app_args.reset = !args.app_args.no_reset;
-
-    Ok(())
+    Ok(AppArgs {
+        reset: args.reset,
+        no_reset: args.no_reset,
+        speed: args.speed,
+        bin: Some(bin.as_os_str().to_os_string()),
+        serial: args.serial.clone(),
+    })
 }
