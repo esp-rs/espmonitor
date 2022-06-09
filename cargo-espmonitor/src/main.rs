@@ -15,10 +15,20 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
+#[macro_use]
+extern crate anyhow;
+#[macro_use]
+extern crate serde;
+
 use cargo_project::{Artifact, Profile, Project};
-use clap::{ArgGroup, Parser};
+use clap::Parser;
 use espmonitor::{run, AppArgs, Chip, Framework};
-use std::{error::Error, io, process::Command};
+use std::{
+    ffi::OsString,
+    fs, io,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Parser)]
 #[clap(name = "cargo")]
@@ -29,14 +39,6 @@ enum Cargo {
 
 #[derive(clap::Args)]
 #[clap(author, version, about)]
-// None of the arguments related to flashing can appear without "--flash", but they aren't required
-// (e.g. if "--flash" isn't specified) and multiple of them can appear
-#[clap(group(
-        ArgGroup::new("will_flash")
-            .required(false)
-            .multiple(true)
-            .args(&["FLASH_BAUD", "release", "example", "features"])
-            .requires("flash")))]
 struct CargoAppArgs {
     /// Reset the chip on start [default]
     #[clap(short, long)]
@@ -55,8 +57,17 @@ struct CargoAppArgs {
     flash: bool,
 
     /// Baud rate when flashing
-    #[clap(long, default_value_t = 460800, name = "FLASH_BAUD")]
+    #[clap(
+        long,
+        default_value_t = 460800,
+        name = "FLASH_BAUD",
+        requires = "flash"
+    )]
     flash_speed: u32,
+
+    /// If flashing, build with these features first
+    #[clap(long, requires = "flash")]
+    features: Option<String>,
 
     /// Which ESP chip to target
     #[clap(short, long, arg_enum, default_value_t = Chip::ESP32)]
@@ -70,13 +81,13 @@ struct CargoAppArgs {
     #[clap(long)]
     release: bool,
 
-    /// If flashing, flash this example app
-    #[clap(long)]
+    /// Example app to use
+    #[clap(long, conflicts_with = "bin")]
     example: Option<String>,
 
-    /// If flashing, build with these features first
-    #[clap(long)]
-    features: Option<String>,
+    /// Bin target to use
+    #[clap(long, conflicts_with = "example")]
+    bin: Option<String>,
 
     /// Infer chip and framework from target triple
     #[clap(
@@ -119,14 +130,18 @@ fn main() {
     }
 }
 
-fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
+fn run_flash(cargo_app_args: &mut CargoAppArgs) -> anyhow::Result<()> {
     let mut args = vec!["espflash".to_string()];
     if cargo_app_args.release {
         args.push("--release".to_string());
     }
-    if let Some(example) = cargo_app_args.example.take() {
+    if let Some(example) = &cargo_app_args.example {
         args.push("--example".to_string());
-        args.push(example);
+        args.push(example.clone());
+    }
+    if let Some(bin) = &cargo_app_args.bin {
+        args.push("--package".to_string());
+        args.push(bin.clone());
     }
     if let Some(features) = cargo_app_args.features.take() {
         args.push("--features".to_string());
@@ -144,7 +159,7 @@ fn run_flash(cargo_app_args: &mut CargoAppArgs) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn handle_args(args: &mut CargoAppArgs) -> Result<AppArgs, Box<dyn Error>> {
+fn handle_args(args: &mut CargoAppArgs) -> anyhow::Result<AppArgs> {
     let (chip, framework) = match args.target {
         Some(ref target) => (Chip::from_target(target)?, Framework::from_target(target)?),
         None => (
@@ -155,19 +170,18 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<AppArgs, Box<dyn Error>> {
         ),
     };
 
-    let project = Project::query(".").unwrap();
-    let artifact = match args.example.as_ref() {
-        Some(example) => Artifact::Example(example.as_str()),
-        None => Artifact::Bin(project.name()),
-    };
     let profile = if args.release {
         Profile::Release
     } else {
         Profile::Dev
     };
-
-    let host = "x86_64-unknown-linux-gnu"; // FIXME: does this even matter?
-    let bin = project.path(artifact, profile, Some(&chip.target(framework)), host)?;
+    let target = chip.target(framework);
+    let artifact = match (&args.example, &args.bin) {
+        (Some(example), _) => Some(Artifact::Example(example.as_str())),
+        (_, Some(bin)) => Some(Artifact::Bin(bin.as_str())),
+        _ => None,
+    };
+    let bin = find_artifact_path(&artifact, profile, &target, PathBuf::from("."))?;
 
     args.reset = !args.no_reset;
 
@@ -175,7 +189,61 @@ fn handle_args(args: &mut CargoAppArgs) -> Result<AppArgs, Box<dyn Error>> {
         reset: args.reset,
         no_reset: args.no_reset,
         speed: args.speed,
-        bin: Some(bin.as_os_str().to_os_string()),
+        bin: Some(bin),
         serial: args.serial.clone(),
     })
+}
+
+#[derive(Deserialize)]
+struct CargoTomlWorkspace {
+    members: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct CargoToml {
+    workspace: CargoTomlWorkspace,
+}
+
+fn find_artifact_path<P: AsRef<Path>>(
+    artifact: &Option<Artifact>,
+    profile: Profile,
+    target: &String,
+    project_root: P,
+) -> anyhow::Result<OsString> {
+    match Project::query(project_root.as_ref()) {
+        Ok(project) => {
+            let our_artifact = artifact.unwrap_or(Artifact::Bin(project.name()));
+            let host = "x86_64-unknown-linux-gnu"; // FIXME: does this even matter?
+            let bin = project
+                .path(our_artifact, profile, Some(target), host)
+                .map_err(|err| anyhow!("{}", err))?;
+            Ok(bin.as_os_str().to_os_string())
+        }
+        Err(_) => {
+            let mut cargo_toml_path = project_root.as_ref().to_path_buf();
+            cargo_toml_path.push("Cargo.toml");
+            let members: anyhow::Result<Vec<String>> = fs::read(cargo_toml_path)
+                .map_err(|_| anyhow!("No Cargo.toml found at this location"))
+                .and_then(|cargo_toml_bytes| {
+                    toml::from_slice::<CargoToml>(&cargo_toml_bytes)
+                        .map_err(|_| anyhow!("No valid cargo project found at this location"))
+                })
+                .map(|mut cargo_toml| std::mem::take(&mut cargo_toml.workspace.members));
+            for member in members? {
+                let mut member_path = project_root.as_ref().to_path_buf();
+                member_path.push(member);
+                if let Ok(path) = find_artifact_path(artifact, profile, target, &member_path) {
+                    return Ok(path);
+                }
+            }
+            Err(match artifact {
+                Some(Artifact::Example(example)) => {
+                    anyhow!("Could not find example '{}' in project", example)
+                }
+                Some(Artifact::Bin(bin)) => anyhow!("Could not find bin '{}' in project", bin),
+                None => anyhow!("Couldn't find a binary; try passing --bin or --example"),
+                _ => unreachable!(),
+            })
+        }
+    }
 }
