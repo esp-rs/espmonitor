@@ -29,6 +29,20 @@ While monitoring, ESPMonitor accepts the following keyboard commands:
 * CTRL+R: Reset chip
 * CTRL+C: Quit
 
-## Releasing
+## Contributing
+
+### Hooks
+
+Before you start writing code, run this in the root of the repo:
+
+```
+mkdir -p .git/hooks && (cd .git/hooks && ln -s ../../hooks/* .)
+```
+
+This will set up a pre-commit hook that will run `cargo clippy` and
+`cargo fmt` before each commit, to save you some time getting frustrated
+with failed PR checks.
+
+### Releasing
 
 See [RELEASING](RELEASING.md) for instructions.
