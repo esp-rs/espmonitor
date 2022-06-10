@@ -1,6 +1,6 @@
 [package]
 name = "cargo-espmonitor"
-version = "0.9.1-alpha.1"
+version = "0.10.0"
 description = "Cargo subcommand for monitoring ESP8266 and ESP32 execution over serial"
 license = "GPL-3.0"
 authors = [
@@ -26,6 +26,6 @@ keywords = [
 anyhow = "1"
 cargo-project = "0.2"
 clap = { version = "3.1", features = ["derive"] }
-espmonitor = { version = "^0.9.1-alpha.1", path = "../espmonitor" }
+espmonitor = { version = "^0.10.0", path = "../espmonitor" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.5"
