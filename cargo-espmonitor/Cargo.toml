@@ -23,6 +23,9 @@ keywords = [
 ]
 
 [dependencies]
+anyhow = "1"
 cargo-project = "0.2"
-espmonitor = { version = "^0.9.1-alpha.1", path = "../espmonitor" }
 clap = { version = "3.1", features = ["derive"] }
+espmonitor = { version = "^0.9.1-alpha.1", path = "../espmonitor" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.5"
