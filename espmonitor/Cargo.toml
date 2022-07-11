@@ -33,7 +33,7 @@ clap = { version = "3", features = ["derive"] }
 crossterm = "0.24"
 gimli = "0.26"
 lazy_static = "1"
-object = "0.27"
+object = "0.29"
 regex = "1"
 serial = "0.4"
 
