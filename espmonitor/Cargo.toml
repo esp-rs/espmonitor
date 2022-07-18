@@ -28,7 +28,7 @@ path = "src/main.rs"
 [lib]
 
 [dependencies]
-addr2line = "0.17"
+addr2line = "0.18"
 clap = { version = "3", features = ["derive"] }
 crossterm = "0.24"
 gimli = "0.26"
