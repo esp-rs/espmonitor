@@ -30,7 +30,7 @@ path = "src/main.rs"
 [dependencies]
 addr2line = "0.17"
 clap = { version = "3", features = ["derive"] }
-crossterm = "0.24"
+crossterm = "0.25"
 gimli = "0.26"
 lazy_static = "1"
 object = "0.27"
