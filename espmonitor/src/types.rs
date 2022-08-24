@@ -22,7 +22,7 @@ use std::{
     io::{Error as IoError, ErrorKind},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, ArgEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ArgEnum)]
 pub enum Framework {
     Baremetal,
     EspIdf,
@@ -64,7 +64,7 @@ impl Default for Framework {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, ArgEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ArgEnum)]
 pub enum Chip {
     ESP32,
     ESP32S2,
