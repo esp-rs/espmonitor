@@ -28,14 +28,14 @@ path = "src/main.rs"
 [lib]
 
 [dependencies]
-addr2line = "0.17"
+addr2line = "0.18"
 clap = { version = "3", features = ["derive"] }
-crossterm = "0.24"
+crossterm = "0.25"
 gimli = "0.26"
 lazy_static = "1"
-object = "0.27"
+object = "0.29"
 regex = "1"
 serial = "0.4"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.24"
+nix = "0.25"
