@@ -31,6 +31,7 @@ use std::{
     fs,
     io::{self, stdout, ErrorKind, Read, Write},
     process::exit,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -216,8 +217,8 @@ pub fn load_bin_context(data: &[u8]) -> Result<Symbols, Box<dyn std::error::Erro
 fn reset_chip(dev: &mut SystemPort) -> io::Result<()> {
     print!("Resetting device... ");
     std::io::stdout().flush()?;
-    dev.set_dtr(false)?;
     dev.set_rts(true)?;
+    thread::sleep(Duration::from_millis(200));
     dev.set_rts(false)?;
     rprintln!("done");
     Ok(())
