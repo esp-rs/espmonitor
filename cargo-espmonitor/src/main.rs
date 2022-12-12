@@ -31,75 +31,74 @@ use std::{
 };
 
 #[derive(Parser)]
-#[clap(name = "cargo")]
-#[clap(bin_name = "cargo")]
+#[command(name = "cargo", bin_name = "cargo")]
 enum Cargo {
     Espmonitor(CargoAppArgs),
 }
 
 #[derive(clap::Args)]
-#[clap(author, version, about)]
+#[command(author, version, about)]
 struct CargoAppArgs {
     /// Reset the chip on start [default]
-    #[clap(short, long)]
+    #[arg(short, long)]
     reset: bool,
 
     /// Do not reset the chip on start
-    #[clap(long, conflicts_with("reset"))]
+    #[arg(long, conflicts_with("reset"))]
     no_reset: bool,
 
     /// Baud rate of serial device
-    #[clap(long, short, default_value = "115200", name = "BAUD")]
+    #[arg(long, short, default_value = "115200", value_name = "BAUD")]
     speed: usize,
 
     /// Flashes image to device (building first if necessary; requires 'cargo-espflash')
-    #[clap(long)]
+    #[arg(long)]
     flash: bool,
 
     /// Baud rate when flashing
-    #[clap(
+    #[arg(
         long,
         default_value_t = 460800,
-        name = "FLASH_BAUD",
+        value_name = "FLASH_BAUD",
         requires = "flash"
     )]
     flash_speed: u32,
 
     /// If flashing, build with these features first
-    #[clap(long, requires = "flash")]
+    #[arg(long, requires = "flash")]
     features: Option<String>,
 
     /// Which ESP chip to target
-    #[clap(short, long, arg_enum, default_value_t = Chip::ESP32)]
+    #[arg(short, long, value_enum, default_value_t = Chip::ESP32)]
     chip: Chip,
 
     /// Which framework to target
-    #[clap(long, arg_enum, default_value_t = Framework::EspIdf)]
+    #[arg(long, value_enum, default_value_t = Framework::EspIdf)]
     framework: Framework,
 
     /// Use the release build
-    #[clap(long)]
+    #[arg(long)]
     release: bool,
 
     /// Example app to use
-    #[clap(long, conflicts_with = "bin")]
+    #[arg(long, conflicts_with = "bin")]
     example: Option<String>,
 
     /// Bin target to use
-    #[clap(long, conflicts_with = "example")]
+    #[arg(long, conflicts_with = "example")]
     bin: Option<String>,
 
     /// Infer chip and framework from target triple
-    #[clap(
+    #[arg(
         long,
-        name = "TARGET_TRIPLE",
+        value_name = "TARGET_TRIPLE",
         conflicts_with("chip"),
         conflicts_with("framework")
     )]
     target: Option<String>,
 
     /// Path to the serial device
-    #[clap(name = "SERIAL_DEVICE")]
+    #[arg(value_name = "SERIAL_DEVICE")]
     serial: String,
 }
 
@@ -245,5 +244,16 @@ fn find_artifact_path<P: AsRef<Path>>(
                 _ => unreachable!(),
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cargo_espmonitor_cli() {
+        Cargo::command().debug_assert();
     }
 }

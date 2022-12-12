@@ -34,3 +34,14 @@ fn main() {
         }
     };
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_espmonitor_cli() {
+        AppArgs::command().debug_assert();
+    }
+}

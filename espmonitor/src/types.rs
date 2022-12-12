@@ -15,14 +15,14 @@
 // You should have received a copy of the GNU General Public License
 // along with ESPMonitor.  If not, see <https://www.gnu.org/licenses/>.
 
-use clap::{ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 use std::{
     convert::TryFrom,
     ffi::OsString,
     io::{Error as IoError, ErrorKind},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ArgEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Framework {
     Baremetal,
     EspIdf,
@@ -64,7 +64,7 @@ impl Default for Framework {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ArgEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Chip {
     ESP32,
     ESP32S2,
@@ -139,25 +139,25 @@ impl Default for Chip {
 }
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about)]
+#[command(author, version, about)]
 pub struct AppArgs {
     /// Reset the chip on start [default]
-    #[clap(short, long)]
+    #[arg(short, long)]
     pub reset: bool,
 
     /// Do not reset the chip on start
-    #[clap(long, conflicts_with("reset"))]
+    #[arg(long, conflicts_with("reset"))]
     pub no_reset: bool,
 
     /// Baud rate of serial device
-    #[clap(long, short, default_value = "115200", name = "BAUD")]
+    #[arg(long, short, default_value = "115200", value_name = "BAUD")]
     pub speed: usize,
 
     /// Path to executable matching what is on the device
-    #[clap(long, short, name = "BINARY")]
+    #[arg(long, short, value_name = "BINARY")]
     pub bin: Option<OsString>,
 
     /// Path to the serial device
-    #[clap(name = "SERIAL_DEVICE")]
+    #[arg(value_name = "SERIAL_DEVICE")]
     pub serial: String,
 }
