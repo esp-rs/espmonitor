@@ -28,4 +28,4 @@ cargo-project = "0.3"
 clap = { version = "4", features = ["derive"] }
 espmonitor = { version = "^0.10.1-alpha.1", path = "../espmonitor" }
 serde = { version = "1", features = ["derive"] }
-toml = "0.5"
+toml = "0.7"
