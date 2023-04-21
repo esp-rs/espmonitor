@@ -23,7 +23,9 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Default)]
 pub enum Framework {
+    #[default]
     Baremetal,
     EspIdf,
 }
@@ -58,14 +60,12 @@ impl TryFrom<&str> for Framework {
     }
 }
 
-impl Default for Framework {
-    fn default() -> Self {
-        Framework::Baremetal
-    }
-}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Default)]
 pub enum Chip {
+    #[default]
     ESP32,
     ESP32S2,
     ESP8266,
@@ -132,11 +132,7 @@ impl TryFrom<&str> for Chip {
     }
 }
 
-impl Default for Chip {
-    fn default() -> Self {
-        Chip::ESP32
-    }
-}
+
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
