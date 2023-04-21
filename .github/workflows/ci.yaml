@@ -9,22 +9,14 @@ jobs:
     name: janitorial
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           components: clippy
-          override: true
-      - uses: actions-rs/clippy-check@v1
-        with:
-          toolchain: stable
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features -- -D warnings
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo fmt --check
+
   test:
     name: test
     runs-on: ${{ matrix.os }}
@@ -45,13 +37,8 @@ jobs:
             target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.target }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: test
-          args: --release --target=${{ matrix.target }}
+      - run: cargo test --release --target=${{ matrix.target }}
