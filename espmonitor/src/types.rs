@@ -22,8 +22,7 @@ use std::{
     io::{Error as IoError, ErrorKind},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 pub enum Framework {
     #[default]
     Baremetal,
@@ -60,10 +59,7 @@ impl TryFrom<&str> for Framework {
     }
 }
 
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 pub enum Chip {
     #[default]
     ESP32,
@@ -131,8 +127,6 @@ impl TryFrom<&str> for Chip {
         }
     }
 }
-
-
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
