@@ -222,9 +222,9 @@ dependencies = [
 
 [[package]]
 name = "gimli"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dec7af912d60cdbd3677c1af9352ebae6fb8394d165568a2234df0fa00f87793"
+checksum = "ad0a93d233ebf96623465aad4046a8d3aa4da22d4f4beba5388838c8a434bbb4"
 dependencies = [
  "fallible-iterator",
  "indexmap",
